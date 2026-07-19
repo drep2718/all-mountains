@@ -1,26 +1,160 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ============================================================
+   All Mountains — "Topographic Field Guide" design system
+   Warm, map-like, outdoor. Dark-primary (best for maps + phone).
+   ============================================================ */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  /* Ground & surfaces (warm charcoal, slight green bias) */
+  --color-ground: #0e100d;
+  --color-surface: #161a15;
+  --color-surface-2: #1e241c;
+  --color-surface-3: #27301f;
+  --color-border: #2a3227;
+  --color-border-bright: #3a4535;
+
+  /* Ink */
+  --color-ink: #eef2ea;
+  --color-ink-muted: #9aa896;
+  --color-ink-faint: #6b7866;
+
+  /* Brand — pine green */
+  --color-pine-50: #e8f5ee;
+  --color-pine-200: #a7ddc4;
+  --color-pine-400: #4fc78f;
+  --color-pine-500: #2e9b76;
+  --color-pine-600: #1f7d5e;
+  --color-pine-700: #175f47;
+  --color-pine-900: #0d3a2b;
+
+  /* Trail accent — blaze orange (routes, waypoints) */
+  --color-trail-300: #f2a982;
+  --color-trail-500: #e8814e;
+  --color-trail-600: #d16632;
+
+  /* Sky — water / elevation */
+  --color-sky-400: #7cc0dc;
+  --color-sky-500: #58a6c9;
+
+  /* Difficulty ramp */
+  --color-diff-easy: #4fb477;
+  --color-diff-moderate: #4f9dc7;
+  --color-diff-hard: #e0b44f;
+  --color-diff-expert: #e8814e;
+  --color-diff-extreme: #e0574e;
+
+  /* --- Back-compat aliases: old class names → warm field-guide palette --- */
+  --color-slate-950: #0e100d;
+  --color-slate-900: #161a15;
+  --color-slate-800: #1e241c;
+  --color-slate-700: #2a3227;
+  --color-slate-600: #3a4535;
+  --color-slate-500: #6b7866;
+  --color-slate-400: #9aa896;
+  --color-slate-300: #c3ccbd;
+  --color-slate-200: #dbe1d6;
+  --color-slate-100: #eef2ea;
+  --color-slate-50: #f4f6f2;
+
+  --color-alpine-300: #a7ddc4;
+  --color-alpine-400: #4fc78f;
+  --color-alpine-500: #2e9b76;
+  --color-alpine-600: #1f7d5e;
+  --color-alpine-700: #175f47;
+
+  --color-summit-400: #7cc0dc;
+  --color-summit-500: #58a6c9;
+  --color-summit-600: #58a6c9;
+  --color-summit-700: #3b7ea1;
+
+  --color-peak-400: #f2a982;
+  --color-peak-500: #e8814e;
+  --color-peak-600: #d16632;
+
+  --font-display: var(--font-archivo);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --background: #0e100d;
+  --foreground: #eef2ea;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Contour-line texture — subtle topographic feel on cards/heroes */
+.topo-texture {
+  background-image: repeating-radial-gradient(
+    circle at 30% 20%,
+    rgba(79, 199, 143, 0.04) 0,
+    rgba(79, 199, 143, 0.04) 1px,
+    transparent 1px,
+    transparent 22px
+  );
+}
+
+.font-display {
+  font-family: var(--font-archivo), system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* Mapbox popup — themed to match */
+.mapboxgl-popup-content {
+  background: #161a15 !important;
+  color: #eef2ea !important;
+  border: 1px solid #2a3227 !important;
+  border-radius: 14px !important;
+  padding: 0 !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55) !important;
+}
+.mapboxgl-popup-tip {
+  border-top-color: #161a15 !important;
+  border-bottom-color: #161a15 !important;
+}
+.mapboxgl-popup-close-button {
+  color: #9aa896 !important;
+  font-size: 18px !important;
+  padding: 6px 9px !important;
+}
+.mapboxgl-ctrl-group {
+  background: #161a15 !important;
+  border: 1px solid #2a3227 !important;
+}
+.mapboxgl-ctrl-group button {
+  background: transparent !important;
+}
+.mapboxgl-ctrl-group button + button {
+  border-top: 1px solid #2a3227 !important;
+}
+.mapboxgl-ctrl-icon {
+  filter: invert(0.85) !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a3227;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4535;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
