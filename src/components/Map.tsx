@@ -270,13 +270,21 @@ export default function Map({
     m.on("moveend", emitBounds);
     m.on("resize", emitBounds);
 
-    // Mapbox reads the container size once at construction; during React
-    // hydration that can be 0px, leaving a blank map until user interaction.
-    // Track the container and resize the map whenever its box changes.
+    // Mapbox can measure the container mid-hydration and end up with a stale
+    // transform: style loads but no tiles render and bounds are degenerate
+    // until something calls resize(). A manual resize() provably recovers it,
+    // so nudge the map a few times after mount, plus track real box changes.
     const ro = new ResizeObserver(() => m.resize());
     ro.observe(mapContainer.current);
+    const nudges = [300, 1200, 3000].map((delay) =>
+      setTimeout(() => {
+        m.resize();
+        emitBounds();
+      }, delay)
+    );
 
     return () => {
+      nudges.forEach(clearTimeout);
       ro.disconnect();
       m.remove();
       map.current = null;
