@@ -27,10 +27,10 @@ function Landing() {
       <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 text-center">
         <div className="mb-4 flex items-center gap-2 rounded-full border border-slate-700/50 bg-slate-900/50 px-4 py-1.5 text-sm text-slate-300 backdrop-blur-sm">
           <span className="h-2 w-2 rounded-full bg-alpine-500" />
-          1.2M+ peaks worldwide
+          134,000+ peaks · 2,400+ trails
         </div>
 
-        <h1 className="max-w-4xl text-5xl font-bold leading-tight tracking-tight sm:text-7xl">
+        <h1 className="max-w-4xl font-display text-5xl font-bold leading-tight tracking-tight sm:text-7xl">
           Every Mountain.{" "}
           <span className="bg-gradient-to-r from-alpine-400 to-summit-400 bg-clip-text text-transparent">
             One App.
@@ -38,8 +38,8 @@ function Landing() {
         </h1>
 
         <p className="mt-6 max-w-2xl text-lg text-slate-400 sm:text-xl">
-          Discover every peak you can summit within your radius. Track your
-          climbs, explore the map, and build your mountain logbook.
+          Find your next summit, see the trails that reach it, and keep a
+          logbook of every climb — across the US, Canada, the Alps, and Japan.
         </p>
 
         <div className="mt-10 flex flex-col gap-4 sm:flex-row">
@@ -60,12 +60,12 @@ function Landing() {
         {/* Stats bar */}
         <div className="mt-20 grid grid-cols-3 gap-8 sm:gap-16">
           {[
-            { value: "1.2M+", label: "Peaks" },
-            { value: "195", label: "Countries" },
+            { value: "134K+", label: "Peaks" },
+            { value: "2,400+", label: "Trails" },
             { value: "Free", label: "Forever" },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
-              <div className="text-2xl font-bold text-alpine-400 sm:text-3xl">
+              <div className="text-2xl font-bold text-alpine-600 sm:text-3xl">
                 {stat.value}
               </div>
               <div className="mt-1 text-sm text-slate-500">{stat.label}</div>
@@ -81,7 +81,7 @@ function Landing() {
             {
               icon: "🗺️",
               title: "Interactive Map",
-              desc: "Explore peaks on a 3D terrain map. Set your radius and see every mountain around you.",
+              desc: "Explore peaks on a 3D terrain map. Pan anywhere and see every peak and trail around you.",
             },
             {
               icon: "📔",
@@ -91,7 +91,7 @@ function Landing() {
             {
               icon: "🏔️",
               title: "Peak Details",
-              desc: "Elevation, prominence, difficulty, photos, and Wikipedia info for every peak on Earth.",
+              desc: "Elevation, prominence, difficulty, photos, and Wikipedia info for every peak — plus the trails that reach them.",
             },
           ].map((feature) => (
             <div

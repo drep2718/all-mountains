@@ -175,7 +175,7 @@ export default function LogbookPage() {
                     </div>
                   )}
                   {log.peaks?.elevation && (
-                    <div className="mt-1 text-sm font-medium text-alpine-400">
+                    <div className="mt-1 text-sm font-medium text-alpine-600">
                       {log.peaks.elevation.toLocaleString()}m
                     </div>
                   )}

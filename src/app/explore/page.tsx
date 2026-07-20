@@ -29,7 +29,7 @@ function ExploreInner() {
 
   const [peaks, setPeaks] = useState<Peak[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
-  const [initialCenter] = useState<[number, number]>([35.24, 24.47]);
+  const [initialCenter] = useState<[number, number]>([39.63, -106.37]);
   const [loading, setLoading] = useState(false);
   const [activeRoute, setActiveRoute] = useState<Route | null>(null);
   const [focusBounds, setFocusBounds] = useState<[number, number, number, number] | null>(null);
@@ -149,7 +149,7 @@ function ExploreInner() {
         <div className="absolute left-1/2 top-16 z-10 flex -translate-x-1/2 items-center gap-3 rounded-full border border-trail-500/40 bg-ground/90 px-4 py-2 text-sm backdrop-blur">
           <span className="truncate max-w-[50vw] font-medium text-ink">🥾 {activeRoute.name}</span>
           <Link href="/explore" onClick={() => { setIsolating(false); setRoutes([]); }}
-            className="text-trail-400 hover:text-trail-300">Show all</Link>
+            className="text-trail-600 hover:text-trail-500">Show all</Link>
         </div>
       )}
 
@@ -195,7 +195,7 @@ function ExploreInner() {
                       <div className="text-sm text-ink-muted">{peak.country}</div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      {peak.elevation && <span className="font-mono text-sm font-medium text-pine-400">{peak.elevation.toLocaleString()}m</span>}
+                      {peak.elevation && <span className="font-mono text-sm font-medium text-pine-600">{peak.elevation.toLocaleString()}m</span>}
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getDifficultyColor(diff)}`}>{diff}</span>
                     </div>
                   </Link>

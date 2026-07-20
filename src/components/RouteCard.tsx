@@ -62,7 +62,7 @@ export default function RouteCard({ route }: { route: Route }) {
             </span>
           )}
           {route.peak_count ? (
-            <span className="text-pine-400">
+            <span className="text-pine-600">
               {route.peak_count} peak{route.peak_count === 1 ? "" : "s"}
             </span>
           ) : null}

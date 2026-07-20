@@ -38,7 +38,7 @@ export default function LocationSearch({ onSelect, selected, placeholder = "Ente
   if (selected) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-pine-500 bg-pine-500/10 px-3 py-2.5 text-sm">
-        <svg className="h-4 w-4 flex-shrink-0 text-pine-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <svg className="h-4 w-4 flex-shrink-0 text-pine-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
         </svg>

@@ -142,7 +142,7 @@ export default function PeakDetailPage() {
             🛰 Satellite view
           </span>
         )}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent p-6 pt-20">
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-surface via-surface/85 to-transparent p-6 pt-20">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${diffColor}`}>
               {difficulty}
@@ -153,10 +153,10 @@ export default function PeakDetailPage() {
               </span>
             )}
           </div>
-          <h1 className="text-3xl font-bold text-white sm:text-4xl">
+          <h1 className="font-display text-3xl font-bold text-ink sm:text-4xl">
             {peak.name || "Unnamed Peak"}
           </h1>
-          <p className="mt-1 text-slate-300">
+          <p className="mt-1 text-ink-muted">
             {[place?.place, place?.region, place?.country ?? peak.country]
               .filter(Boolean)
               .join(" · ")}
@@ -186,7 +186,7 @@ export default function PeakDetailPage() {
       {/* View on the live map */}
       <Link
         href={`/explore?peak=${peak.id}`}
-        className="mb-6 flex items-center justify-center gap-2 rounded-2xl border border-pine-600 bg-pine-600/10 py-3 text-sm font-semibold text-pine-300 transition-colors hover:bg-pine-600/20"
+        className="mb-6 flex items-center justify-center gap-2 rounded-2xl border border-pine-600 bg-pine-600/10 py-3 text-sm font-semibold text-pine-700 transition-colors hover:bg-pine-600/20"
       >
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
@@ -208,7 +208,7 @@ export default function PeakDetailPage() {
           href={peak.wikipedia_url}
           target="_blank"
           rel="noopener noreferrer"
-          className="mb-8 flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 p-4 text-sm text-summit-400 transition-colors hover:border-slate-700"
+          className="mb-8 flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 p-4 text-sm text-summit-600 transition-colors hover:border-slate-700"
         >
           <span>📖</span>
           Read more on Wikipedia →

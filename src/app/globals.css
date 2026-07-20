@@ -1,76 +1,79 @@
 @import "tailwindcss";
 
 /* ============================================================
-   All Mountains — "Topographic Field Guide" design system
-   Warm, map-like, outdoor. Dark-primary (best for maps + phone).
+   All Mountains — "Fresh Trail" design system
+   Light, friendly, outdoors-first (AllTrails-inspired):
+   warm off-white ground, deep trail green, soft stone borders.
    ============================================================ */
 
 @theme inline {
-  /* Ground & surfaces (warm charcoal, slight green bias) */
-  --color-ground: #0e100d;
-  --color-surface: #161a15;
-  --color-surface-2: #1e241c;
-  --color-surface-3: #27301f;
-  --color-border: #2a3227;
-  --color-border-bright: #3a4535;
+  /* Ground & surfaces (warm paper white with a faint green cast) */
+  --color-ground: #f8f8f4;
+  --color-surface: #ffffff;
+  --color-surface-2: #f1f3ec;
+  --color-surface-3: #e7eadf;
+  --color-border: #e3e6da;
+  --color-border-bright: #c9d1bc;
 
   /* Ink */
-  --color-ink: #eef2ea;
-  --color-ink-muted: #9aa896;
-  --color-ink-faint: #6b7866;
+  --color-ink: #1f261b;
+  --color-ink-muted: #59634e;
+  --color-ink-faint: #8a927d;
 
-  /* Brand — pine green */
-  --color-pine-50: #e8f5ee;
-  --color-pine-200: #a7ddc4;
-  --color-pine-400: #4fc78f;
-  --color-pine-500: #2e9b76;
-  --color-pine-600: #1f7d5e;
-  --color-pine-700: #175f47;
-  --color-pine-900: #0d3a2b;
+  /* Brand — deep trail green */
+  --color-pine-50: #f0f6e6;
+  --color-pine-200: #cfe4ad;
+  --color-pine-400: #67a021;
+  --color-pine-500: #4f8a10;
+  --color-pine-600: #427508;
+  --color-pine-700: #365f08;
+  --color-pine-900: #1f3805;
 
-  /* Trail accent — blaze orange (routes, waypoints) */
-  --color-trail-300: #f2a982;
-  --color-trail-500: #e8814e;
-  --color-trail-600: #d16632;
+  /* Trail accent — earthy blaze orange (routes, waypoints) */
+  --color-trail-300: #e79a6b;
+  --color-trail-500: #c95d27;
+  --color-trail-600: #ad4c1c;
 
   /* Sky — water / elevation */
-  --color-sky-400: #7cc0dc;
-  --color-sky-500: #58a6c9;
+  --color-sky-400: #4f92b5;
+  --color-sky-500: #3d7e9f;
 
-  /* Difficulty ramp */
-  --color-diff-easy: #4fb477;
-  --color-diff-moderate: #4f9dc7;
-  --color-diff-hard: #e0b44f;
-  --color-diff-expert: #e8814e;
-  --color-diff-extreme: #e0574e;
+  /* Difficulty ramp (deepened for light backgrounds) */
+  --color-diff-easy: #2e7d4f;
+  --color-diff-moderate: #2a6f9e;
+  --color-diff-hard: #a97b12;
+  --color-diff-expert: #c05c1d;
+  --color-diff-extreme: #c23b32;
 
-  /* --- Back-compat aliases: old class names → warm field-guide palette --- */
-  --color-slate-950: #0e100d;
-  --color-slate-900: #161a15;
-  --color-slate-800: #1e241c;
-  --color-slate-700: #2a3227;
-  --color-slate-600: #3a4535;
-  --color-slate-500: #6b7866;
-  --color-slate-400: #9aa896;
-  --color-slate-300: #c3ccbd;
-  --color-slate-200: #dbe1d6;
-  --color-slate-100: #eef2ea;
-  --color-slate-50: #f4f6f2;
+  /* --- Back-compat aliases: old dark-scale names → light palette ---
+     The scale is intentionally inverted: components used slate-950 as
+     "page background" and slate-100 as "primary text". */
+  --color-slate-950: #f8f8f4;
+  --color-slate-900: #ffffff;
+  --color-slate-800: #eef1e8;
+  --color-slate-700: #dfe4d5;
+  --color-slate-600: #c4ccb4;
+  --color-slate-500: #8a927d;
+  --color-slate-400: #59634e;
+  --color-slate-300: #454e3b;
+  --color-slate-200: #333a2c;
+  --color-slate-100: #1f261b;
+  --color-slate-50: #171c14;
 
-  --color-alpine-300: #a7ddc4;
-  --color-alpine-400: #4fc78f;
-  --color-alpine-500: #2e9b76;
-  --color-alpine-600: #1f7d5e;
-  --color-alpine-700: #175f47;
+  --color-alpine-300: #cfe4ad;
+  --color-alpine-400: #67a021;
+  --color-alpine-500: #4f8a10;
+  --color-alpine-600: #427508;
+  --color-alpine-700: #365f08;
 
-  --color-summit-400: #7cc0dc;
-  --color-summit-500: #58a6c9;
-  --color-summit-600: #58a6c9;
-  --color-summit-700: #3b7ea1;
+  --color-summit-400: #4f92b5;
+  --color-summit-500: #3d7e9f;
+  --color-summit-600: #35708f;
+  --color-summit-700: #2a5a74;
 
-  --color-peak-400: #f2a982;
-  --color-peak-500: #e8814e;
-  --color-peak-600: #d16632;
+  --color-peak-400: #e79a6b;
+  --color-peak-500: #c95d27;
+  --color-peak-600: #ad4c1c;
 
   --font-display: var(--font-archivo);
   --font-sans: var(--font-geist-sans);
@@ -78,8 +81,8 @@
 }
 
 :root {
-  --background: #0e100d;
-  --foreground: #eef2ea;
+  --background: #f8f8f4;
+  --foreground: #1f261b;
 }
 
 body {
@@ -92,8 +95,8 @@ body {
 .topo-texture {
   background-image: repeating-radial-gradient(
     circle at 30% 20%,
-    rgba(79, 199, 143, 0.04) 0,
-    rgba(79, 199, 143, 0.04) 1px,
+    rgba(79, 138, 16, 0.05) 0,
+    rgba(79, 138, 16, 0.05) 1px,
     transparent 1px,
     transparent 22px
   );
@@ -106,34 +109,31 @@ body {
 
 /* Mapbox popup — themed to match */
 .mapboxgl-popup-content {
-  background: #161a15 !important;
-  color: #eef2ea !important;
-  border: 1px solid #2a3227 !important;
+  background: #ffffff !important;
+  color: #1f261b !important;
+  border: 1px solid #e3e6da !important;
   border-radius: 14px !important;
   padding: 0 !important;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55) !important;
+  box-shadow: 0 10px 30px rgba(31, 38, 27, 0.16) !important;
 }
 .mapboxgl-popup-tip {
-  border-top-color: #161a15 !important;
-  border-bottom-color: #161a15 !important;
+  border-top-color: #ffffff !important;
+  border-bottom-color: #ffffff !important;
 }
 .mapboxgl-popup-close-button {
-  color: #9aa896 !important;
+  color: #59634e !important;
   font-size: 18px !important;
   padding: 6px 9px !important;
 }
 .mapboxgl-ctrl-group {
-  background: #161a15 !important;
-  border: 1px solid #2a3227 !important;
+  background: #ffffff !important;
+  border: 1px solid #e3e6da !important;
 }
 .mapboxgl-ctrl-group button {
   background: transparent !important;
 }
 .mapboxgl-ctrl-group button + button {
-  border-top: 1px solid #2a3227 !important;
-}
-.mapboxgl-ctrl-icon {
-  filter: invert(0.85) !important;
+  border-top: 1px solid #e3e6da !important;
 }
 
 /* Scrollbar */
@@ -145,11 +145,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2a3227;
+  background: #d5dbc9;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a4535;
+  background: #c4ccb4;
 }
 
 @media (prefers-reduced-motion: reduce) {

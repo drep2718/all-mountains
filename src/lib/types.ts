@@ -133,11 +133,11 @@ export function getDifficulty(elevation: number | null): Difficulty {
 }
 
 export const DIFFICULTY_HEX: Record<Difficulty, string> = {
-  Easy: "#4fb477",
-  Moderate: "#4f9dc7",
-  Hard: "#e0b44f",
-  Expert: "#e8814e",
-  Extreme: "#e0574e",
+  Easy: "#2e7d4f",
+  Moderate: "#2a6f9e",
+  Hard: "#a97b12",
+  Expert: "#c05c1d",
+  Extreme: "#c23b32",
 };
 
 export function getDifficultyColor(difficulty: Difficulty): string {

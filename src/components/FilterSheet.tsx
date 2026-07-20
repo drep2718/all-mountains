@@ -71,7 +71,7 @@ export default function FilterSheet({ open, filters, onChange, onClose, resultCo
 
           {/* Length */}
           <Section title="Length" trailing={
-            <span className="font-mono text-sm text-pine-400">
+            <span className="font-mono text-sm text-pine-600">
               {filters.lengthMin} – {filters.lengthMax >= LENGTH_CAP ? `${LENGTH_CAP}+` : filters.lengthMax} km
             </span>
           }>
@@ -151,7 +151,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
     <button onClick={onClick}
       className={`flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors ${
         active
-          ? "border-pine-500 bg-pine-500/15 text-pine-300"
+          ? "border-pine-500 bg-pine-500/15 text-pine-700"
           : "border-border bg-surface text-ink-muted hover:border-border-bright hover:text-ink"
       }`}>
       {children}

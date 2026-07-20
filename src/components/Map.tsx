@@ -114,7 +114,7 @@ export default function Map({
         type: "line",
         source: "routes",
         layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": "#0e100d", "line-width": 5, "line-opacity": 0.5 },
+        paint: { "line-color": "#ffffff", "line-width": 5, "line-opacity": 0.5 },
       });
       m.addLayer({
         id: "route-lines",
@@ -125,8 +125,8 @@ export default function Map({
           "line-color": [
             "case",
             ["==", ["get", "id"], activeRouteId ?? -1],
-            "#f2a982",
-            "#e8814e",
+            "#e79a6b",
+            "#c95d27",
           ],
           "line-width": ["case", ["==", ["get", "id"], activeRouteId ?? -1], 4, 2.5],
           "line-opacity": 0.9,
@@ -152,9 +152,9 @@ export default function Map({
           "circle-color": [
             "step",
             ["get", "point_count"],
-            "#1f7d5e", 10,
-            "#2e9b76", 50,
-            "#4fc78f",
+            "#427508", 10,
+            "#4f8a10", 50,
+            "#67a021",
           ],
           "circle-radius": [
             "step",
@@ -176,7 +176,7 @@ export default function Map({
           "text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
           "text-size": 13,
         },
-        paint: { "text-color": "#0e100d" },
+        paint: { "text-color": "#ffffff" },
       });
 
       // Individual peaks
@@ -190,7 +190,7 @@ export default function Map({
           "circle-color": ["case", ["==", ["get", "iconic"], 1], "#e8b33a", ["get", "color"]],
           "circle-radius": ["case", ["==", ["get", "iconic"], 1], 9, 6],
           "circle-stroke-width": ["case", ["==", ["get", "iconic"], 1], 3, 2],
-          "circle-stroke-color": ["case", ["==", ["get", "iconic"], 1], "#ffffff", "rgba(238,242,234,0.75)"],
+          "circle-stroke-color": ["case", ["==", ["get", "iconic"], 1], "#ffffff", "rgba(255,255,255,0.9)"],
         },
       });
       // A star glyph on top of iconic peaks
@@ -217,8 +217,8 @@ export default function Map({
           "text-optional": true,
         },
         paint: {
-          "text-color": "#eef2ea",
-          "text-halo-color": "#0e100d",
+          "text-color": "#1f261b",
+          "text-halo-color": "#ffffff",
           "text-halo-width": 1.4,
         },
       });
@@ -268,8 +268,16 @@ export default function Map({
     // where `load` fires before the container has final dimensions)
     m.once("idle", emitBounds);
     m.on("moveend", emitBounds);
+    m.on("resize", emitBounds);
+
+    // Mapbox reads the container size once at construction; during React
+    // hydration that can be 0px, leaving a blank map until user interaction.
+    // Track the container and resize the map whenever its box changes.
+    const ro = new ResizeObserver(() => m.resize());
+    ro.observe(mapContainer.current);
 
     return () => {
+      ro.disconnect();
       m.remove();
       map.current = null;
     };
@@ -309,7 +317,7 @@ export default function Map({
   useEffect(() => {
     if (!ready || !map.current) return;
     map.current.setPaintProperty("route-lines", "line-color", [
-      "case", ["==", ["get", "id"], activeRouteId ?? -1], "#f2a982", "#e8814e",
+      "case", ["==", ["get", "id"], activeRouteId ?? -1], "#e79a6b", "#c95d27",
     ]);
     map.current.setPaintProperty("route-lines", "line-width", [
       "case", ["==", ["get", "id"], activeRouteId ?? -1], 4, 2.5,

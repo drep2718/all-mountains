@@ -48,7 +48,7 @@ export default function PeakCard({ peak, distance }: { peak: Peak; distance?: nu
         <div className="mt-3 flex items-center gap-4 text-sm">
           {peak.elevation && (
             <div className="flex items-center gap-1.5">
-              <svg className="h-4 w-4 text-pine-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <svg className="h-4 w-4 text-pine-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 20l5.5-11L12 14l3-6 6 12H3z" />
               </svg>
               <span className="font-mono font-semibold text-ink">{peak.elevation.toLocaleString()}m</span>

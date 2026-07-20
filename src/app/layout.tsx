@@ -35,13 +35,13 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
     title: "All Mountains",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0f1a",
+  themeColor: "#f8f8f4",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

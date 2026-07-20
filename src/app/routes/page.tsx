@@ -95,7 +95,7 @@ export default function RoutesBrowsePage() {
       {/* Active area chip */}
       {place && (
         <p className="mt-3 text-sm text-ink-muted">
-          Showing trails in <span className="font-medium text-pine-400">{place.name}</span>
+          Showing trails in <span className="font-medium text-pine-600">{place.name}</span>
         </p>
       )}
 

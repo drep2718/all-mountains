@@ -57,7 +57,7 @@ export function routeStaticMapUrl(
   route: Pick<Route, "geometry">,
   width = 640,
   height = 360,
-  color = "e8814e"
+  color = "c95d27"
 ): string | null {
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
   if (!token) return null;

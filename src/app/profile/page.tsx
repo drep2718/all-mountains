@@ -167,7 +167,7 @@ export default function ProfilePage() {
         <div>
           <label className="flex items-center justify-between text-sm font-medium text-slate-300">
             <span>Default Search Radius</span>
-            <span className="text-alpine-400">{radiusKm}km</span>
+            <span className="text-alpine-600">{radiusKm}km</span>
           </label>
           <input
             type="range"
@@ -201,7 +201,7 @@ export default function ProfilePage() {
           <p className={`rounded-lg px-3 py-2 text-sm ${
             message.startsWith("Error")
               ? "bg-red-500/10 text-red-400"
-              : "bg-alpine-500/10 text-alpine-400"
+              : "bg-alpine-500/10 text-alpine-600"
           }`}>
             {message}
           </p>

@@ -130,7 +130,7 @@ export default function RouteDetailPage() {
             <ul className="space-y-1.5 text-sm text-ink-muted">
               {access.map((a) => (
                 <li key={a} className="flex items-center gap-2">
-                  <span className="text-pine-400">✓</span> {a}
+                  <span className="text-pine-600">✓</span> {a}
                 </li>
               ))}
             </ul>
@@ -165,7 +165,7 @@ export default function RouteDetailPage() {
                   <div className="truncate font-display font-semibold text-ink">{peak.name || "Unnamed Peak"}</div>
                   <div className="text-sm text-ink-muted">{peak.country}</div>
                 </div>
-                {peak.elevation && <span className="font-mono text-sm font-medium text-pine-400">{peak.elevation.toLocaleString()}m</span>}
+                {peak.elevation && <span className="font-mono text-sm font-medium text-pine-600">{peak.elevation.toLocaleString()}m</span>}
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getDifficultyColor(diff)}`}>{diff}</span>
               </Link>
             );
