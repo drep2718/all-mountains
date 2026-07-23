@@ -62,8 +62,10 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-ground text-ink">
         <Providers>
           <Navbar />
-          {/* pt-16 on desktop for top nav; pb-16 on mobile for bottom nav */}
-          <main className="flex-1 md:pt-16 pb-16 md:pb-0">{children}</main>
+          {/* pt-16 on desktop for top nav; on mobile reserve the bottom tab bar
+              height PLUS the iOS home-indicator safe area so content never hides
+              behind it. */}
+          <main className="flex-1 md:pt-16 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">{children}</main>
         </Providers>
       </body>
     </html>

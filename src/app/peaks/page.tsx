@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import PeakCard from "@/components/PeakCard";
+import LocationSearch from "@/components/LocationSearch";
+import type { GeocodeResult } from "@/lib/geocode";
 import type { Peak, Difficulty } from "@/lib/types";
 import { getDifficulty } from "@/lib/types";
 
@@ -14,7 +16,9 @@ export default function PeaksPage() {
   const [search, setSearch] = useState("");
   const [difficulty, setDifficulty] = useState<Difficulty | "All">("All");
   const [iconicOnly, setIconicOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<"elevation" | "name">("elevation");
+  const [sortBy, setSortBy] = useState<"popular" | "elevation" | "name">("popular");
+  const [place, setPlace] = useState<GeocodeResult | null>(null);
+  const [radiusOn, setRadiusOn] = useState(true);
   const [page, setPage] = useState(0);
   const supabase = createClient();
   const pageSize = 24;
@@ -39,7 +43,23 @@ export default function PeaksPage() {
         query = query.eq("is_iconic", true);
       }
 
-      if (sortBy === "elevation") {
+      // Area filter: peaks whose coordinates fall inside the searched
+      // mountain/place box. Skipped when the radius toggle is off.
+      if (place?.bbox && radiusOn) {
+        const [minLng, minLat, maxLng, maxLat] = place.bbox;
+        query = query
+          .gte("latitude", minLat).lte("latitude", maxLat)
+          .gte("longitude", minLng).lte("longitude", maxLng);
+      }
+
+      if (sortBy === "popular") {
+        // Popularity proxy: curated iconic summits first, then the most
+        // prominent, then the highest — the peaks people actually seek out.
+        query = query
+          .order("is_iconic", { ascending: false, nullsFirst: false })
+          .order("prominence", { ascending: false, nullsFirst: false })
+          .order("elevation", { ascending: false, nullsFirst: false });
+      } else if (sortBy === "elevation") {
         query = query.order("elevation", { ascending: false, nullsFirst: false });
       } else {
         query = query.order("name", { ascending: true, nullsFirst: false });
@@ -61,7 +81,7 @@ export default function PeaksPage() {
 
     const debounce = setTimeout(fetch, search ? 300 : 0);
     return () => clearTimeout(debounce);
-  }, [search, difficulty, iconicOnly, sortBy, page]);
+  }, [search, difficulty, iconicOnly, sortBy, place, radiusOn, page]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -74,6 +94,14 @@ export default function PeaksPage() {
 
       {/* Filters */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
+        <div className="w-full sm:w-64">
+          <LocationSearch
+            selected={place}
+            onSelect={(p) => { setPlace(p); setPage(0); }}
+            placeholder="Search a mountain or place..."
+          />
+        </div>
+
         <div className="relative flex-1 sm:max-w-md">
           <svg
             className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
@@ -120,13 +148,36 @@ export default function PeaksPage() {
 
         <select
           value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as "elevation" | "name")}
+          onChange={(e) => { setSortBy(e.target.value as "popular" | "elevation" | "name"); setPage(0); }}
           className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-slate-300 outline-none"
         >
+          <option value="popular">Most popular</option>
           <option value="elevation">Highest First</option>
           <option value="name">A → Z</option>
         </select>
       </div>
+
+      {/* Active area chip + radius toggle */}
+      {place && (
+        <div className="mb-6 -mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-400">
+          <span>
+            {radiusOn ? "Peaks near " : "Searching everywhere · centred on "}
+            <span className="font-medium text-alpine-600">{place.name}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => { setRadiusOn((v) => !v); setPage(0); }}
+            role="switch"
+            aria-checked={radiusOn}
+            className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+              radiusOn ? "border-alpine-600 bg-alpine-500/10 text-alpine-600" : "border-slate-700 bg-slate-900 text-slate-400"
+            }`}
+          >
+            <span className={`h-2 w-2 rounded-full ${radiusOn ? "bg-alpine-500" : "bg-slate-500"}`} />
+            {radiusOn ? "Limit to this area" : "Area filter off"}
+          </button>
+        </div>
+      )}
 
       {/* Results */}
       {loading ? (

@@ -8,6 +8,8 @@ import type { Peak, SummitLog } from "@/lib/types";
 import { getDifficulty, getDifficultyColor } from "@/lib/types";
 import { peakImageUrl, hasRealPhoto } from "@/lib/peakImage";
 import { reverseGeocode, type PlaceContext } from "@/lib/geocode";
+import TrailsForPeak from "@/components/TrailsForPeak";
+import SaveToListButton from "@/components/SaveToListButton";
 
 export default function PeakDetailPage() {
   const { id } = useParams();
@@ -193,6 +195,14 @@ export default function PeakDetailPage() {
         </svg>
         View on map
       </Link>
+
+      {/* Save to a list */}
+      <div className="mb-6">
+        <SaveToListButton itemType="peak" itemId={peak.id} />
+      </div>
+
+      {/* Trails that summit this peak (sortable by commonality / difficulty) */}
+      <TrailsForPeak peakId={peak.id} />
 
       {/* About (Wikipedia description) */}
       {peak.description && (

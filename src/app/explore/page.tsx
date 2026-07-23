@@ -118,7 +118,9 @@ function ExploreInner() {
   const list = tab === "peaks" ? shownPeaks : shownRoutes;
 
   return (
-    <div className="relative h-[calc(100vh-4rem)]">
+    // Mobile uses dvh (dynamic viewport) so the map isn't overgrown behind
+    // iOS Safari's collapsing toolbars; desktop keeps the fixed top-nav offset.
+    <div className="relative h-[calc(100dvh-4rem)] md:h-[calc(100vh-4rem)]">
       <Map
         peaks={shownPeaks}
         routes={shownRoutes}
@@ -130,10 +132,11 @@ function ExploreInner() {
         focusBounds={focusBounds}
       />
 
-      {/* Top overlay: location search + filters */}
-      <div className="absolute inset-x-3 top-3 z-10 flex items-center gap-2">
+      {/* Top overlay: location search + filters. top offset respects the iOS
+          Dynamic Island / status bar via env(safe-area-inset-top). */}
+      <div className="absolute inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] z-10 flex items-center gap-2">
         <div className="w-full max-w-xs">
-          <LocationSearch selected={null} onSelect={jumpToPlace} placeholder="Jump to a town or state..." />
+          <LocationSearch selected={null} onSelect={jumpToPlace} placeholder="Search a mountain or place..." />
         </div>
         <button onClick={() => setFilterOpen(true)}
           className="flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-border bg-ground/90 px-3 py-2.5 text-sm font-medium text-ink backdrop-blur transition-colors hover:bg-surface">
@@ -228,7 +231,7 @@ function ExploreInner() {
 
 export default function ExplorePage() {
   return (
-    <Suspense fallback={<div className="flex h-[calc(100vh-4rem)] items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-pine-400" /></div>}>
+    <Suspense fallback={<div className="flex h-[calc(100dvh-4rem)] items-center justify-center md:h-[calc(100vh-4rem)]"><div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-pine-400" /></div>}>
       <ExploreInner />
     </Suspense>
   );

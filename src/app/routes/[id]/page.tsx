@@ -10,6 +10,7 @@ import {
   NETWORK_LABEL, surfaceLabel, accessInfo,
 } from "@/lib/types";
 import { routeStaticMapUrl } from "@/lib/staticMap";
+import SaveToListButton from "@/components/SaveToListButton";
 
 export default function RouteDetailPage() {
   const { id } = useParams();
@@ -99,6 +100,11 @@ export default function RouteDetailPage() {
         </div>
         <h1 className="mt-3 font-display text-3xl font-extrabold text-ink sm:text-4xl">{route.name || "Unnamed Route"}</h1>
         <p className="mt-1 text-ink-muted">{route.region ? `${route.region}, ` : ""}{route.country}</p>
+      </div>
+
+      {/* Save to a list */}
+      <div className="mt-5">
+        <SaveToListButton itemType="route" itemId={route.id} />
       </div>
 
       {/* Key stats */}

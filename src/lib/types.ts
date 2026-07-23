@@ -59,6 +59,19 @@ export interface PeakList {
   description: string | null;
   is_public: boolean;
   created_at: string;
+  item_count?: number; // virtual — count of list_items
+}
+
+export type ListItemType = "peak" | "route";
+
+export interface ListItem {
+  id: number;
+  list_id: number;
+  peak_id: number | null;
+  route_id: number | null;
+  created_at: string;
+  peak?: Peak | null;
+  route?: Route | null;
 }
 
 export interface Route {

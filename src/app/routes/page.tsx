@@ -15,18 +15,39 @@ const PAGE_SIZE = 24;
 
 async function fetchRoutes(
   search: string, filters: Filters, place: GeocodeResult | null,
-  sortBy: string, page: number
+  radiusOn: boolean, sortBy: string, page: number
 ): Promise<Route[]> {
   let q = supabase.from("routes").select("*").not("name", "is", null);
   if (search) q = q.ilike("name", `%${search}%`);
   q = applyRouteFilters(q, filters);
 
-  // Area filter: routes whose bbox overlaps the searched place's bbox
-  if (place?.bbox) {
+  // Area filter: routes whose bbox overlaps the searched place's bbox.
+  // Skipped when the radius toggle is off, so a place search can span everywhere.
+  if (place?.bbox && radiusOn) {
     const [minLng, minLat, maxLng, maxLat] = place.bbox;
     q = q
       .lte("bbox_min_lat", maxLat).gte("bbox_max_lat", minLat)
       .lte("bbox_min_lng", maxLng).gte("bbox_max_lng", minLng);
+  }
+
+  // "Most popular": rank by how many named peaks a route crosses (peak_count).
+  // That's a computed count, not a column, so fetch a wide set, tally from the
+  // route_peaks junction, sort, and paginate client-side.
+  if (sortBy === "popular") {
+    const { data, error } = await q.limit(300);
+    if (error) throw error;
+    const routes = (data as Route[]) ?? [];
+    if (routes.length) {
+      const { data: links } = await supabase
+        .from("route_peaks").select("route_id").in("route_id", routes.map((r) => r.id));
+      const counts = new Map<number, number>();
+      ((links ?? []) as { route_id: number }[]).forEach((l) =>
+        counts.set(l.route_id, (counts.get(l.route_id) ?? 0) + 1));
+      routes.forEach((r) => { r.peak_count = counts.get(r.id) ?? 0; });
+      routes.sort((a, b) =>
+        (b.peak_count! - a.peak_count!) || ((b.distance_km ?? 0) - (a.distance_km ?? 0)));
+    }
+    return routes.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   }
 
   q = q.order(sortBy, { ascending: false, nullsFirst: false })
@@ -41,14 +62,15 @@ export default function RoutesBrowsePage() {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [place, setPlace] = useState<GeocodeResult | null>(null);
-  const [sortBy, setSortBy] = useState("distance_km");
+  const [radiusOn, setRadiusOn] = useState(true);
+  const [sortBy, setSortBy] = useState("popular");
   const [page, setPage] = useState(0);
   const [filterOpen, setFilterOpen] = useState(false);
 
   // React Query caches each unique combination — revisiting is instant.
   const { data: routes = [], isLoading } = useQuery({
-    queryKey: ["routes", search, filters, place?.name ?? null, sortBy, page],
-    queryFn: () => fetchRoutes(search, filters, place, sortBy, page),
+    queryKey: ["routes", search, filters, place?.name ?? null, radiusOn, sortBy, page],
+    queryFn: () => fetchRoutes(search, filters, place, radiusOn, sortBy, page),
     placeholderData: (prev) => prev, // keep old results visible while refetching
   });
 
@@ -85,18 +107,34 @@ export default function RoutesBrowsePage() {
           {nFilters > 0 && <span className="rounded-full bg-pine-500 px-1.5 text-xs font-semibold text-white">{nFilters}</span>}
         </button>
 
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
+        <select value={sortBy} onChange={(e) => reset(() => setSortBy(e.target.value))}
           className="rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-ink-muted outline-none">
+          <option value="popular">Most popular</option>
           <option value="distance_km">Longest</option>
           <option value="est_time_min">Most time</option>
         </select>
       </div>
 
-      {/* Active area chip */}
+      {/* Active area chip + radius toggle */}
       {place && (
-        <p className="mt-3 text-sm text-ink-muted">
-          Showing trails in <span className="font-medium text-pine-600">{place.name}</span>
-        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-ink-muted">
+          <span>
+            {radiusOn ? "Trails near " : "Searching everywhere · centred on "}
+            <span className="font-medium text-pine-600">{place.name}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => reset(() => setRadiusOn((v) => !v))}
+            role="switch"
+            aria-checked={radiusOn}
+            className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+              radiusOn ? "border-pine-600 bg-pine-600/10 text-pine-700" : "border-border bg-surface text-ink-muted"
+            }`}
+          >
+            <span className={`h-2 w-2 rounded-full ${radiusOn ? "bg-pine-600" : "bg-ink-faint"}`} />
+            {radiusOn ? "Limit to this area" : "Area filter off"}
+          </button>
+        </div>
       )}
 
       {isLoading ? (

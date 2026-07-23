@@ -6,24 +6,37 @@ export interface GeocodeResult {
   bbox: [number, number, number, number] | null; // [minLng, minLat, maxLng, maxLat]
 }
 
+// ~0.15° box (~15 km) synthesized around a point-only result (mountains/POIs
+// rarely carry a bbox), so "Mount Shasta" both flies the map there and gives
+// list pages a sensible area to filter by.
+const POINT_SPAN = 0.15;
+
 export async function geocode(query: string): Promise<GeocodeResult[]> {
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
   if (!token || query.trim().length < 2) return [];
 
+  // `poi` pulls in named natural features (mountains, lakes, parks) so you can
+  // search ANY mountain by name even when it isn't a summit node in our DB.
   const url =
     `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json` +
-    `?types=place,region,district,locality&limit=5&access_token=${token}`;
+    `?types=place,region,district,locality,poi&limit=6&access_token=${token}`;
 
   const res = await fetch(url);
   if (!res.ok) return [];
   const data = await res.json();
 
   return (data.features || []).map(
-    (f: { place_name: string; center: [number, number]; bbox?: number[] }) => ({
-      name: f.place_name,
-      center: f.center,
-      bbox: f.bbox && f.bbox.length === 4 ? (f.bbox as [number, number, number, number]) : null,
-    })
+    (f: { place_name: string; text?: string; center: [number, number]; bbox?: number[] }) => {
+      const [lng, lat] = f.center;
+      return {
+        name: f.place_name,
+        center: f.center,
+        bbox:
+          f.bbox && f.bbox.length === 4
+            ? (f.bbox as [number, number, number, number])
+            : [lng - POINT_SPAN, lat - POINT_SPAN, lng + POINT_SPAN, lat + POINT_SPAN],
+      };
+    }
   );
 }
 

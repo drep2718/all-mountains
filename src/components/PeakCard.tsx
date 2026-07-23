@@ -2,7 +2,15 @@ import Link from "next/link";
 import { type Peak, getDifficulty, getDifficultyColor } from "@/lib/types";
 import { peakImageUrl } from "@/lib/peakImage";
 
-export default function PeakCard({ peak, distance }: { peak: Peak; distance?: number }) {
+export default function PeakCard({
+  peak,
+  distance,
+  trailCount,
+}: {
+  peak: Peak;
+  distance?: number;
+  trailCount?: number;
+}) {
   const difficulty = getDifficulty(peak.elevation);
   const imageUrl = peakImageUrl(peak);
 
@@ -63,6 +71,14 @@ export default function PeakCard({ peak, distance }: { peak: Peak; distance?: nu
             </div>
           )}
         </div>
+
+        {trailCount !== undefined && (
+          <div className="mt-3 border-t border-border pt-2.5 text-sm font-medium text-trail-500">
+            {trailCount > 0
+              ? `${trailCount} trail${trailCount === 1 ? "" : "s"} to this summit →`
+              : "No mapped trails yet"}
+          </div>
+        )}
       </div>
     </Link>
   );
