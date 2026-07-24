@@ -19,25 +19,30 @@ export async function geocode(query: string): Promise<GeocodeResult[]> {
   // search ANY mountain by name even when it isn't a summit node in our DB.
   const url =
     `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json` +
-    `?types=place,region,district,locality,poi&limit=6&access_token=${token}`;
+    `?types=place,region,district,locality,poi&limit=8&access_token=${token}`;
 
   const res = await fetch(url);
   if (!res.ok) return [];
   const data = await res.json();
 
-  return (data.features || []).map(
-    (f: { place_name: string; text?: string; center: [number, number]; bbox?: number[] }) => {
-      const [lng, lat] = f.center;
-      return {
-        name: f.place_name,
-        center: f.center,
-        bbox:
-          f.bbox && f.bbox.length === 4
-            ? (f.bbox as [number, number, number, number])
-            : [lng - POINT_SPAN, lat - POINT_SPAN, lng + POINT_SPAN, lat + POINT_SPAN],
-      };
-    }
-  );
+  return (data.features || [])
+    // Drop weak matches — this is what removes the "Mount, Cornwall" /
+    // "Shastar, Hamirpur" style noise from a search like "Mount Shasta".
+    .filter((f: { relevance?: number }) => (f.relevance ?? 1) >= 0.8)
+    .slice(0, 4)
+    .map(
+      (f: { place_name: string; text?: string; center: [number, number]; bbox?: number[] }) => {
+        const [lng, lat] = f.center;
+        return {
+          name: f.place_name,
+          center: f.center,
+          bbox:
+            f.bbox && f.bbox.length === 4
+              ? (f.bbox as [number, number, number, number])
+              : [lng - POINT_SPAN, lat - POINT_SPAN, lng + POINT_SPAN, lat + POINT_SPAN],
+        };
+      }
+    );
 }
 
 export interface PlaceContext {

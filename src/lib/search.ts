@@ -40,7 +40,7 @@ export interface PeakHit {
   elevation: number | null;
 }
 
-export async function searchPeaksByName(query: string, limit = 5): Promise<PeakHit[]> {
+export async function searchPeaksByName(query: string, limit = 4): Promise<PeakHit[]> {
   const q = query.trim();
   if (!q) return [];
   const supabase = createClient();
@@ -48,7 +48,9 @@ export async function searchPeaksByName(query: string, limit = 5): Promise<PeakH
     .from("peaks")
     .select("id,name,latitude,longitude,elevation")
     .ilike("name", `%${q}%`)
+    .not("name", "is", null)          // never surface unnamed nodes
     .order("is_iconic", { ascending: false, nullsFirst: false })
+    .order("prominence", { ascending: false, nullsFirst: false }) // real summits over sub-features
     .order("elevation", { ascending: false, nullsFirst: false })
     .limit(limit);
   return ((data ?? []) as unknown as PeakHit[]);

@@ -12,26 +12,53 @@ export default function ListsPage() {
   const qc = useQueryClient();
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [newName, setNewName] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    createClient().auth.getUser().then(({ data: { user } }) => {
-      if (!user) router.push("/login");
-      else setSignedIn(true);
-    });
-  }, [router]);
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => setSignedIn(!!user));
+    // React to the session hydrating/refreshing so a signed-in user is never
+    // shown the signed-out state due to a first-paint timing race.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_e, session) => setSignedIn(!!session?.user)
+    );
+    return () => subscription.unsubscribe();
+  }, []);
 
   const lists = useQuery({ queryKey: ["my-lists"], queryFn: fetchMyLists, enabled: !!signedIn });
 
   const create = useMutation({
     mutationFn: () => createList(newName.trim()),
-    onSuccess: () => { setNewName(""); qc.invalidateQueries({ queryKey: ["my-lists"] }); },
+    onSuccess: () => { setNewName(""); setError(null); qc.invalidateQueries({ queryKey: ["my-lists"] }); },
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Couldn't create the list."),
   });
   const remove = useMutation({
     mutationFn: (id: number) => deleteList(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["my-lists"] }),
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Couldn't delete the list."),
   });
 
-  if (!signedIn) return null;
+  // Still checking auth
+  if (signedIn === null) return null;
+
+  // Signed out — say so plainly instead of silently bouncing to /login
+  if (signedIn === false) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-20 text-center">
+        <div className="mb-3 text-4xl">🗂️</div>
+        <h1 className="font-display text-2xl font-bold text-ink">Sign in to build lists</h1>
+        <p className="mt-2 text-sm text-ink-muted">
+          Lists save peaks and trails to your account so they sync across devices.
+        </p>
+        <button
+          onClick={() => router.push("/login")}
+          className="mt-6 rounded-xl bg-pine-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-pine-700"
+        >
+          Sign in
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -53,9 +80,15 @@ export default function ListsPage() {
           disabled={!newName.trim() || create.isPending}
           className="flex-none rounded-xl bg-pine-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-pine-700 disabled:opacity-50"
         >
-          + New list
+          {create.isPending ? "Creating…" : "+ New list"}
         </button>
       </form>
+
+      {error && (
+        <div className="mb-6 rounded-xl border border-diff-extreme/40 bg-diff-extreme/10 px-4 py-3 text-sm text-diff-extreme">
+          {error}
+        </div>
+      )}
 
       {lists.isLoading ? (
         <div className="text-sm text-ink-faint">Loading…</div>

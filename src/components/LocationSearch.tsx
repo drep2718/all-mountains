@@ -34,6 +34,7 @@ export default function LocationSearch({ onSelect, selected, placeholder = "Sear
       const [peaks, places] = await Promise.all([searchPeaksByName(query), geocode(query)]);
       const peakRows: Row[] = peaks
         .filter((p) => p.name)
+        .slice(0, 4)
         .map((p) => ({
           kind: "peak",
           elevation: p.elevation,
@@ -43,8 +44,13 @@ export default function LocationSearch({ onSelect, selected, placeholder = "Sear
             bbox: [p.longitude - PEAK_SPAN, p.latitude - PEAK_SPAN, p.longitude + PEAK_SPAN, p.latitude + PEAK_SPAN],
           },
         }));
-      const placeRows: Row[] = places.map((pl) => ({ kind: "place", place: pl }));
-      setResults([...peakRows, ...placeRows]);
+      // Drop geocoded places that just repeat a peak we're already showing, then
+      // keep the list short so the dropdown never feels cluttered.
+      const peakNames = new Set(peakRows.map((r) => r.place.name.toLowerCase()));
+      const placeRows: Row[] = places
+        .filter((pl) => !peakNames.has(pl.name.split(",")[0].trim().toLowerCase()))
+        .map((pl) => ({ kind: "place", place: pl }));
+      setResults([...peakRows, ...placeRows].slice(0, 6));
       setLoading(false);
       setOpen(true);
     }, 300);

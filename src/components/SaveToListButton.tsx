@@ -24,10 +24,16 @@ export default function SaveToListButton({
   const [open, setOpen] = useState(false);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [newName, setNewName] = useState("");
+  const [err, setErr] = useState<string | null>(null);
   const popRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    createClient().auth.getUser().then(({ data: { user } }) => setSignedIn(!!user));
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => setSignedIn(!!user));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_e, session) => setSignedIn(!!session?.user)
+    );
+    return () => subscription.unsubscribe();
   }, []);
 
   // Close on outside click
@@ -55,9 +61,11 @@ export default function SaveToListButton({
       else await addItem(listId, itemType, itemId);
     },
     onSuccess: () => {
+      setErr(null);
       qc.invalidateQueries({ queryKey: ["lists-containing", itemType, itemId] });
       qc.invalidateQueries({ queryKey: ["my-lists"] });
     },
+    onError: (e: unknown) => setErr(e instanceof Error ? e.message : "Couldn't update the list."),
   });
 
   const create = useMutation({
@@ -67,9 +75,11 @@ export default function SaveToListButton({
     },
     onSuccess: () => {
       setNewName("");
+      setErr(null);
       qc.invalidateQueries({ queryKey: ["my-lists"] });
       qc.invalidateQueries({ queryKey: ["lists-containing", itemType, itemId] });
     },
+    onError: (e: unknown) => setErr(e instanceof Error ? e.message : "Couldn't create the list."),
   });
 
   if (signedIn === false) {
@@ -143,6 +153,8 @@ export default function SaveToListButton({
               Add
             </button>
           </form>
+
+          {err && <p className="mt-2 px-1 text-xs text-diff-extreme">{err}</p>}
         </div>
       )}
     </div>
