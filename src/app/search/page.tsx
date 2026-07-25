@@ -38,6 +38,7 @@ function SearchResults() {
 
   const peaks = data?.peaks ?? [];
   const routes = data?.routes ?? [];
+  const place = data?.place ?? null;
   const showPeaks = tab === "all" || tab === "peaks";
   const showTrails = tab === "all" || tab === "trails";
   const nothing =
@@ -45,9 +46,9 @@ function SearchResults() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-24 pt-6 md:pt-24">
-      <h1 className="mb-1 font-display text-2xl font-bold text-ink">Search</h1>
+      <h1 className="mb-1 font-display text-2xl font-bold text-ink">Search a mountain</h1>
       <p className="mb-5 text-sm text-ink-muted">
-        Find any peak and the trails to its summit, or any trail and the peaks it crosses.
+        Type any mountain — like Mount Rainier — to see every peak and trail around it.
       </p>
 
       <form onSubmit={submit} className="relative mb-6">
@@ -64,10 +65,20 @@ function SearchResults() {
           autoFocus
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Search peaks and trails — e.g. Rainier, Kettle Crest…"
+          placeholder="Search a mountain — e.g. Mount Rainier, Mount Shasta…"
           className="w-full rounded-2xl border border-border bg-surface py-3.5 pl-12 pr-4 text-ink placeholder:text-ink-faint focus:border-border-bright focus:outline-none focus:ring-2 focus:ring-trail-500/30"
         />
       </form>
+
+      {place && (peaks.length > 0 || routes.length > 0) && (
+        <div className="mb-5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border border-pine-200 bg-pine-50 px-4 py-3 text-sm">
+          <span className="font-semibold text-pine-700">📍 {place.name}</span>
+          <span className="text-ink-muted">
+            — {peaks.length} peak{peaks.length === 1 ? "" : "s"} and {routes.length} trail
+            {routes.length === 1 ? "" : "s"} around here
+          </span>
+        </div>
+      )}
 
       {query.trim().length > 0 && (
         <div className="mb-6 flex gap-2">
