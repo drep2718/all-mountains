@@ -46,12 +46,18 @@ the list is owned by your account.
 
 ## 2. What was built
 
-### Trail data: 2,486 → 86,000+ (still importing)
+### Trail data: 2,486 → 106,000+ (still importing)
 
-| Source | Result |
+| Region | Trails |
 |---|---|
-| Hiking **route relations**, all networks | 24,428 |
-| Named **trail ways** (path/footway/track/bridleway) | 62,000+ and climbing |
+| Switzerland | 40,599 |
+| Japan | 31,325 |
+| Canada | 21,648 |
+| United States | 13,261 |
+| **Total** | **106,833** |
+
+Two sources: hiking **route relations** (24,428) and named **trail ways** —
+path / footway / track / bridleway (82,000+ and climbing).
 
 Route relations are only long-distance waymarked networks. Most of what people
 actually walk — and what AllTrails lists — is an individual named way, so both
@@ -88,14 +94,25 @@ The parts that matter on a mountain:
 ### Offline maps (`/downloads`)
 
 Per-trail download with live progress and size, a downloads manager, and an
-offline banner. *Verified*: downloaded a trail, then confirmed a cached tile was
-a valid 220 KB PNG served at HTTP 200 with the trail's own data alongside it.
+offline banner.
 
-One bug worth knowing about, because it would have been invisible: the first
-version cached app code **cache-first**, which pins every user to the build they
-first loaded — they would never receive updates, including fixes to this GPS and
-offline code. It is now stale-while-revalidate, and the worker is not registered
-in development at all.
+**Verified by stopping the server entirely and reloading.** The downloaded trail
+page renders in full with zero network: map thumbnail drawn from cached tiles,
+stats, trailhead directions, elevation section. An undownloaded page correctly
+shows the offline screen instead.
+
+Getting there took five real fixes, none of which unit tests would have caught:
+
+| Bug | Why it mattered |
+|---|---|
+| App code cached **cache-first** | Pinned users to the build they first loaded — no future updates, including fixes to this GPS and offline code |
+| RSC payload served as a document | Offline pages rendered raw `0:{"tree":…` text instead of the page |
+| Tile cache name was **versioned** | A worker update deleted every downloaded map — the user's only map on a mountain |
+| Trail page not cached | "Download for offline" still landed on the offline screen |
+| Only HTML cached, not JS | Nav bar rendered, then an endless spinner |
+
+The worker is not registered in development, where Next's stable chunk names
+would serve yesterday's JavaScript.
 
 ### AllTrails parity added tonight
 - Elevation profile on trail pages (honest "no data" when OSM has no Z values,

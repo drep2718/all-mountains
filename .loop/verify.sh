@@ -16,13 +16,18 @@ KEY=$(grep NEXT_PUBLIC_SUPABASE_ANON_KEY .env.local | cut -d= -f2- | tr -d '"')
 
 # Exact row count for a table via PostgREST's Content-Range header.
 count() {
-  local n
-  n=$(curl -s --max-time 30 "$URL/rest/v1/$1&limit=1" \
-    -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -H "Prefer: count=exact" \
-    -D - -o /dev/null 2>/dev/null | grep -i '^content-range' | sed 's|.*/||' | tr -d '\r\n ')
-  # No header means the query errored (usually a statement timeout while the
-  # importer is hammering the DB). Report it rather than silently scoring 0.
-  [ -z "$n" ] && echo "ERR" || echo "$n"
+  local n attempt
+  # An exact count over an unindexed column can exceed the statement timeout
+  # while an import is writing. Retry before calling it a failure — a slow
+  # count is a performance problem, not missing data.
+  for attempt in 1 2 3; do
+    n=$(curl -s --max-time 30 "$URL/rest/v1/$1&limit=1" \
+      -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -H "Prefer: count=exact" \
+      -D - -o /dev/null 2>/dev/null | grep -i '^content-range' | sed 's|.*/||' | tr -d '\r\n ')
+    [ -n "$n" ] && { echo "$n"; return; }
+    sleep $((attempt * 5))
+  done
+  echo "ERR"
 }
 
 atleast() { # name actual threshold
