@@ -40,9 +40,17 @@ function ExploreInner() {
   const [filterOpen, setFilterOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Isolate a single route when arriving from a trail page (?route=id)
+  // Isolate a single route when arriving from a trail page (?route=id).
+  // `isolating` mirrors the URL param, so derive the cleared case during
+  // render rather than writing state from inside the effect.
+  const [lastFocusRoute, setLastFocusRoute] = useState(focusRouteId);
+  if (focusRouteId !== lastFocusRoute) {
+    setLastFocusRoute(focusRouteId);
+    if (!focusRouteId) setIsolating(false);
+  }
+
   useEffect(() => {
-    if (!focusRouteId) { setIsolating(false); return; }
+    if (!focusRouteId) return;
     (async () => {
       const { data } = await supabase.from("routes").select("*").eq("id", focusRouteId).single();
       if (data) {
@@ -70,9 +78,10 @@ function ExploreInner() {
   }, [focusPeakId]);
 
   // Stable guard — true whenever a ?route= param is present, so an in-flight
-  // viewport fetch can never clobber the isolated route.
+  // viewport fetch can never clobber the isolated route. Written in an effect,
+  // never during render.
   const isolatingRef = useRef(false);
-  isolatingRef.current = !!focusRouteId;
+  useEffect(() => { isolatingRef.current = !!focusRouteId; }, [focusRouteId]);
 
   const handleBoundsChange = useCallback((b: Bounds) => {
     if (timer.current) clearTimeout(timer.current);

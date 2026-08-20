@@ -18,10 +18,15 @@ function SearchResults() {
   const [tab, setTab] = useState<Tab>("all");
 
   // Keep the box in sync when navigating in with a ?q= from elsewhere.
-  useEffect(() => {
+  // Adjusting state during render (rather than in an effect) is React's
+  // recommended way to react to a changed prop — it re-renders before paint
+  // instead of causing a second, visible pass.
+  const [lastQ, setLastQ] = useState(initialQ);
+  if (initialQ !== lastQ) {
+    setLastQ(initialQ);
     setInput(initialQ);
     setQuery(initialQ);
-  }, [initialQ]);
+  }
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ["search", query],

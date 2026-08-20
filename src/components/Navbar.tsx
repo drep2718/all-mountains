@@ -11,9 +11,16 @@ const navItems = [
   { href: "/explore", label: "Explore", icon: MapIcon },
   { href: "/peaks", label: "Peaks", icon: MountainIcon },
   { href: "/routes", label: "Trails", icon: TrailIcon },
+  { href: "/record", label: "Record", icon: RecordIcon },
   { href: "/lists", label: "Lists", icon: HeartIcon },
-  { href: "/logbook", label: "Logbook", icon: BookIcon },
   { href: "/profile", label: "Profile", icon: UserIcon },
+];
+
+// Secondary destinations — desktop nav only, to keep the mobile tab bar to six.
+const secondaryItems = [
+  { href: "/activities", label: "Activities" },
+  { href: "/downloads", label: "Downloads" },
+  { href: "/logbook", label: "Logbook" },
 ];
 
 export default function Navbar() {
@@ -82,6 +89,19 @@ export default function Navbar() {
           </div>
 
           <div className="flex items-center gap-3">
+            {secondaryItems.map(({ href, label }) => (
+              <Link
+                key={href}
+                href={href}
+                className={`hidden text-sm font-medium transition-colors lg:block ${
+                  pathname.startsWith(href)
+                    ? "text-alpine-600"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {label}
+              </Link>
+            ))}
             {user ? (
               <button
                 onClick={handleSignOut}
@@ -129,6 +149,15 @@ function MapIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
+    </svg>
+  );
+}
+
+function RecordIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none" />
     </svg>
   );
 }

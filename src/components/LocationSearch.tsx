@@ -26,8 +26,12 @@ export default function LocationSearch({ onSelect, selected, placeholder = "Sear
   const [loading, setLoading] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
+  // Whether results are shown is derived from the query, so no effect needs to
+  // clear them when the box is emptied.
+  const visible = query.trim().length >= 2 ? results : [];
+
   useEffect(() => {
-    if (!query || query.length < 2) { setResults([]); return; }
+    if (!query || query.length < 2) return;
     const t = setTimeout(async () => {
       setLoading(true);
       // Peaks and places in parallel; peaks first since a typed name is usually a summit.
@@ -91,7 +95,7 @@ export default function LocationSearch({ onSelect, selected, placeholder = "Sear
       <input
         type="text" value={query}
         onChange={(e) => setQuery(e.target.value)}
-        onFocus={() => results.length && setOpen(true)}
+        onFocus={() => visible.length && setOpen(true)}
         placeholder={placeholder}
         className="w-full rounded-xl border border-border bg-surface py-2.5 pl-10 pr-4 text-sm text-ink placeholder-ink-faint outline-none focus:border-pine-500"
       />
@@ -99,10 +103,10 @@ export default function LocationSearch({ onSelect, selected, placeholder = "Sear
         <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border border-border bg-surface shadow-2xl">
           {loading ? (
             <div className="px-4 py-3 text-sm text-ink-faint">Searching...</div>
-          ) : results.length === 0 ? (
+          ) : visible.length === 0 ? (
             <div className="px-4 py-3 text-sm text-ink-faint">No mountains or places found</div>
           ) : (
-            results.map((r, i) => (
+            visible.map((r, i) => (
               <button key={`${r.kind}-${r.place.name}-${i}`}
                 onClick={() => { onSelect(r.place); setOpen(false); setQuery(""); }}
                 className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-ink transition-colors hover:bg-surface-2">

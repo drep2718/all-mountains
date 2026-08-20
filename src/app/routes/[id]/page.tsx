@@ -11,6 +11,8 @@ import {
 } from "@/lib/types";
 import { routeStaticMapUrl } from "@/lib/staticMap";
 import SaveToListButton from "@/components/SaveToListButton";
+import DownloadTrailButton from "@/components/DownloadTrailButton";
+import ElevationProfile from "@/components/ElevationProfile";
 
 export default function RouteDetailPage() {
   const { id } = useParams();
@@ -102,9 +104,16 @@ export default function RouteDetailPage() {
         <p className="mt-1 text-ink-muted">{route.region ? `${route.region}, ` : ""}{route.country}</p>
       </div>
 
-      {/* Save to a list */}
-      <div className="mt-5">
+      {/* Take-it-with-you actions: record, save, download for offline */}
+      <div className="mt-5 space-y-3">
+        <Link
+          href={`/record?route=${route.id}`}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-pine-600 py-3.5 text-sm font-bold text-white transition-colors hover:bg-pine-700"
+        >
+          ▶ Record this hike
+        </Link>
         <SaveToListButton itemType="route" itemId={route.id} />
+        <DownloadTrailButton route={route} />
       </div>
 
       {/* Key stats */}
@@ -115,6 +124,16 @@ export default function RouteDetailPage() {
             <div className="mt-1 font-mono text-lg font-semibold text-ink">{s.value}</div>
           </div>
         ))}
+      </div>
+
+      {/* Elevation profile */}
+      <div className="mt-4">
+        <ElevationProfile
+          geometry={route.geometry}
+          ascentM={route.ascent_m}
+          descentM={route.descent_m}
+          distanceKm={route.distance_km}
+        />
       </div>
 
       {/* Details grid — access, surface, descent, peaks */}

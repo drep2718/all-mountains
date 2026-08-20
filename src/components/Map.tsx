@@ -68,8 +68,17 @@ export default function Map({
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [ready, setReady] = useState(false);
+  // The map's event handlers are registered once but must see the latest props,
+  // so callbacks and data are mirrored into refs. Declared and updated here,
+  // above every effect that reads them.
   const cb = useRef({ onBoundsChange, onPeakClick, onRouteClick });
-  cb.current = { onBoundsChange, onPeakClick, onRouteClick };
+  const peaksRef = useRef(peaks);
+  const routesRef = useRef(routes);
+  useEffect(() => {
+    cb.current = { onBoundsChange, onPeakClick, onRouteClick };
+  }, [onBoundsChange, onPeakClick, onRouteClick]);
+  useEffect(() => { peaksRef.current = peaks; }, [peaks]);
+  useEffect(() => { routesRef.current = routes; }, [routes]);
 
   const emitBounds = useCallback(() => {
     if (!map.current) return;
@@ -291,11 +300,6 @@ export default function Map({
     };
   }, []);
 
-  // Keep refs to latest data for event handlers
-  const peaksRef = useRef(peaks);
-  const routesRef = useRef(routes);
-  peaksRef.current = peaks;
-  routesRef.current = routes;
 
   // Push peak data into the source
   useEffect(() => {

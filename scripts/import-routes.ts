@@ -254,6 +254,47 @@ function buildRoute(rel: OSMRelation, countryName: string) {
   };
 }
 
+type RouteRow = NonNullable<ReturnType<typeof buildRoute>>;
+
+/**
+ * Upsert routes with adaptive batch sizing. Route geometry is heavy and a
+ * PostGIS trigger recomputes `path` per row, so a large batch blows the
+ * statement timeout. On timeout we halve the batch and retry rather than
+ * dropping the rows on the floor.
+ */
+async function upsertRows(rows: RouteRow[]): Promise<number> {
+  let saved = 0;
+  let batchSize = 25;
+  let i = 0;
+
+  while (i < rows.length) {
+    const batch = rows.slice(i, i + batchSize);
+    const { error } = await supabase.from("routes").upsert(batch, { onConflict: "osm_id" });
+
+    if (!error) {
+      saved += batch.length;
+      i += batchSize;
+      process.stdout.write(`\r  Upserted ${Math.min(i, rows.length)}/${rows.length} (batch ${batchSize})   `);
+      continue;
+    }
+
+    const isTimeout = /timeout|canceling statement/i.test(error.message);
+    if (isTimeout && batchSize > 1) {
+      batchSize = Math.max(1, Math.floor(batchSize / 2));
+      console.log(`\n  timeout — reducing batch to ${batchSize}`);
+      await sleep(1000);
+      continue;
+    }
+
+    // Single row that still fails: log and skip so one bad geometry can't
+    // stall the whole country.
+    console.error(`\n  Skipping ${batch.length} row(s): ${error.message.slice(0, 90)}`);
+    i += batchSize;
+    await sleep(500);
+  }
+  return saved;
+}
+
 async function main() {
   // `--all` flag anywhere in the args = import every hiking route.
   // Default = significant routes only (international/national/regional networks).
@@ -279,15 +320,7 @@ async function main() {
 
     console.log(`  ${rows.length} named routes with geometry`);
 
-    for (let i = 0; i < rows.length; i += 200) {
-      const batch = rows.slice(i, i + 200);
-      const { error } = await supabase
-        .from("routes")
-        .upsert(batch, { onConflict: "osm_id" });
-      if (error) console.error(`  Batch error: ${error.message}`);
-      else total += batch.length;
-      process.stdout.write(`\r  Upserted ${Math.min(i + 200, rows.length)}/${rows.length}`);
-    }
+    total += await upsertRows(rows);
     console.log();
   }
 

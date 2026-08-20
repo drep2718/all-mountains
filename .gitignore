@@ -44,3 +44,6 @@ next-env.d.ts
 # Local AI workspace (not published)
 brain/
 .claudeignore
+
+# Loop harness logs (keep the scripts, not the output)
+.loop/*.log
