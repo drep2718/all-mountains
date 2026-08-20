@@ -46,15 +46,18 @@ the list is owned by your account.
 
 ## 2. What was built
 
-### Trail data: 2,486 → 106,000+ (still importing)
+### Trail data: 2,486 → 138,000+ (still importing)
 
 | Region | Trails |
 |---|---|
+| Canada | 53,655 |
 | Switzerland | 40,599 |
 | Japan | 31,325 |
-| Canada | 21,648 |
-| United States | 13,261 |
-| **Total** | **106,833** |
+| United States | 13,266 (ways import still running) |
+| **Total** | **138,845** and climbing |
+
+Peaks: **134,531**. Both remaining ways imports (Canada, US) are still running —
+the number will be higher by the time you read this.
 
 Two sources: hiking **route relations** (24,428) and named **trail ways** —
 path / footway / track / bridleway (82,000+ and climbing).
