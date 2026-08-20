@@ -25,6 +25,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 interface OSMMember {
   type: string;
+  ref?: number;
   role: string;
   geometry?: { lat: number; lon: number }[];
 }
@@ -186,12 +187,65 @@ async function fetchRoutes(countryCode: string): Promise<OSMRelation[]> {
   return Array.from(map.values());
 }
 
-function buildRoute(rel: OSMRelation, countryName: string) {
+/**
+ * Long trails (the Appalachian Trail, the Via Alpina) are modelled in OSM as a
+ * *super-relation* whose members are other relations, one per state or stage.
+ * Those members carry no geometry, so walking only `way` members yields a stub:
+ * the AT imported as "0.1 km". Resolving one level of child relations and
+ * splicing their ways in gives the real route.
+ */
+async function resolveChildRelations(rels: OSMRelation[]): Promise<Map<number, OSMMember[]>> {
+  const childIds = new Set<number>();
+  for (const r of rels) {
+    for (const m of r.members || []) {
+      if (m.type === "relation" && typeof m.ref === "number") childIds.add(m.ref);
+    }
+  }
+  const out = new Map<number, OSMMember[]>();
+  if (childIds.size === 0) return out;
+
+  const ids = [...childIds];
+  console.log(`  Resolving ${ids.length} child relations (super-relations)...`);
+  for (let i = 0; i < ids.length; i += 400) {
+    const chunk = ids.slice(i, i + 400);
+    try {
+      const els = await overpassQuery(
+        `[out:json][timeout:240];relation(id:${chunk.join(",")});out geom;`
+      );
+      for (const el of els) {
+        if (el.type === "relation") out.set(el.id, el.members || []);
+      }
+    } catch (err) {
+      console.log(`  child chunk failed: ${String(err).slice(0, 60)}`);
+    }
+    await sleep(1200);
+  }
+  return out;
+}
+
+/** A relation's own way members, plus the ways of any child relations. */
+function effectiveMembers(rel: OSMRelation, children: Map<number, OSMMember[]>): OSMMember[] {
+  const members = rel.members || [];
+  if (!members.some((m) => m.type === "relation")) return members;
+
+  const out: OSMMember[] = [];
+  for (const m of members) {
+    if (m.type === "way") out.push(m);
+    else if (m.type === "relation" && typeof m.ref === "number") {
+      for (const cm of children.get(m.ref) || []) {
+        if (cm.type === "way") out.push(cm);
+      }
+    }
+  }
+  return out;
+}
+
+function buildRoute(rel: OSMRelation, countryName: string, children: Map<number, OSMMember[]>) {
   const lines: number[][][] = [];
   let minLat = 90, minLng = 180, maxLat = -90, maxLng = -180;
   let distance = 0;
 
-  for (const member of rel.members || []) {
+  for (const member of effectiveMembers(rel, children)) {
     if (member.type !== "way" || !member.geometry || member.geometry.length < 2) continue;
     const coords: number[][] = [];
     let prev: { lat: number; lon: number } | null = null;
@@ -314,8 +368,9 @@ async function main() {
     const relations = await fetchRoutes(cc);
     console.log(`  Found ${relations.length} hiking routes`);
 
+    const children = await resolveChildRelations(relations);
     const rows = relations
-      .map((r) => buildRoute(r, countryName))
+      .map((r) => buildRoute(r, countryName, children))
       .filter((r): r is NonNullable<typeof r> => r !== null && !!r.name);
 
     console.log(`  ${rows.length} named routes with geometry`);

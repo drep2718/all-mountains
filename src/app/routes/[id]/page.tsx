@@ -13,6 +13,7 @@ import { routeStaticMapUrl } from "@/lib/staticMap";
 import SaveToListButton from "@/components/SaveToListButton";
 import DownloadTrailButton from "@/components/DownloadTrailButton";
 import ElevationProfile from "@/components/ElevationProfile";
+import TrailheadActions from "@/components/TrailheadActions";
 
 export default function RouteDetailPage() {
   const { id } = useParams();
@@ -124,6 +125,11 @@ export default function RouteDetailPage() {
             <div className="mt-1 font-mono text-lg font-semibold text-ink">{s.value}</div>
           </div>
         ))}
+      </div>
+
+      {/* Getting to the trailhead */}
+      <div className="mt-4">
+        <TrailheadActions route={route} />
       </div>
 
       {/* Elevation profile */}

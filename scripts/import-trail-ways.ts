@@ -102,6 +102,12 @@ async function overpass(query: string): Promise<OSMWay[]> {
 
 let MIN_KM = 0.5;
 
+/**
+ * Largest bbox (square degrees) worth querying in one shot. Switzerland is
+ * ~9° and succeeded; anything much bigger reliably blows Overpass's limits.
+ */
+const MAX_TILE_AREA = 12;
+
 function buildWay(w: OSMWay, country: string) {
   const geom = w.geometry;
   if (!geom || geom.length < 2) return null;
@@ -186,11 +192,28 @@ async function doTile(
     `["foot"!="no"](${s},${w},${n},${e});out geom;`;
 
   const pad = "  ".repeat(depth + 1);
+  const area = (n - s) * (e - w);
+
+  // A whole-country box for named paths always exceeds Overpass's limits, and
+  // each doomed attempt costs a full timeout across every mirror (~12 min)
+  // before we learn to split. Subdivide big areas up front instead.
+  if (area > MAX_TILE_AREA && depth < 6) {
+    console.log(`${pad}area ${area.toFixed(0)}° — pre-splitting`);
+    const mLat = (s + n) / 2, mLng = (w + e) / 2;
+    let total = 0;
+    for (const [qs, qw, qn, qe] of [
+      [s, w, mLat, mLng], [s, mLng, mLat, e], [mLat, w, n, mLng], [mLat, mLng, n, e],
+    ] as [number, number, number, number][]) {
+      total += await doTile(cc, country, qs, qw, qn, qe, depth + 1);
+      await sleep(800);
+    }
+    return total;
+  }
+
   try {
     const els = await overpass(q);
     // A big region reporting zero ways is far more likely a silent Overpass
     // failure than genuinely empty terrain — split rather than believe it.
-    const area = (n - s) * (e - w);
     if (els.length === 0 && area > 4 && depth < 6) {
       throw new Error("RESPONSE_TOO_LARGE");
     }
