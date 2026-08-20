@@ -81,6 +81,12 @@ async function overpass(query: string): Promise<OSMWay[]> {
       });
       if (!res.ok) { lastError = `${res.status} ${new URL(url).hostname}`; await sleep(2000); continue; }
       const data = await res.json();
+      // Overpass answers 200 with a `remark` when a query times out or runs out
+      // of memory, returning partial or zero results. Treating that as "no
+      // trails here" silently loses whole countries, so force a subdivide.
+      if (typeof data.remark === "string" && /timed out|out of memory/i.test(data.remark)) {
+        throw new Error("RESPONSE_TOO_LARGE");
+      }
       return data.elements || [];
     } catch (err) {
       const msg = String(err);
@@ -182,6 +188,12 @@ async function doTile(
   const pad = "  ".repeat(depth + 1);
   try {
     const els = await overpass(q);
+    // A big region reporting zero ways is far more likely a silent Overpass
+    // failure than genuinely empty terrain — split rather than believe it.
+    const area = (n - s) * (e - w);
+    if (els.length === 0 && area > 4 && depth < 6) {
+      throw new Error("RESPONSE_TOO_LARGE");
+    }
     const rows = els
       .map((el) => buildWay(el, country))
       .filter((r): r is Row => r !== null);

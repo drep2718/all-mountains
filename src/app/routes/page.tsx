@@ -13,13 +13,27 @@ import type { GeocodeResult } from "@/lib/geocode";
 const supabase = createClient();
 const PAGE_SIZE = 24;
 
+// Every trail row carries its full GeoJSON geometry, which is by far the
+// largest column. Ranking candidates for "Most popular" only needs the id and
+// a tiebreak, so ask for those two columns and fetch whole rows for the single
+// page actually rendered. Pulling geometry for 300 trails moved megabytes per
+// request and timed out once the table passed ~90k rows.
+const RANK_COLUMNS = "id,distance_km";
+
 async function fetchRoutes(
   search: string, filters: Filters, place: GeocodeResult | null,
   radiusOn: boolean, sortBy: string, page: number
 ): Promise<Route[]> {
+  // Two builders over the same predicates: `q` returns full rows for a page,
+  // `qRank` returns only the columns needed to rank candidates.
   let q = supabase.from("routes").select("*").not("name", "is", null);
-  if (search) q = q.ilike("name", `%${search}%`);
+  let qRank = supabase.from("routes").select(RANK_COLUMNS).not("name", "is", null);
+  if (search) {
+    q = q.ilike("name", `%${search}%`);
+    qRank = qRank.ilike("name", `%${search}%`);
+  }
   q = applyRouteFilters(q, filters);
+  qRank = applyRouteFilters(qRank, filters);
 
   // Area filter: routes whose bbox overlaps the searched place's bbox.
   // Skipped when the radius toggle is off, so a place search can span everywhere.
@@ -28,26 +42,42 @@ async function fetchRoutes(
     q = q
       .lte("bbox_min_lat", maxLat).gte("bbox_max_lat", minLat)
       .lte("bbox_min_lng", maxLng).gte("bbox_max_lng", minLng);
+    // The ranking query must carry the same area predicate, or "Most popular"
+    // would rank trails from outside the searched area.
+    qRank = qRank
+      .lte("bbox_min_lat", maxLat).gte("bbox_max_lat", minLat)
+      .lte("bbox_min_lng", maxLng).gte("bbox_max_lng", minLng);
   }
 
   // "Most popular": rank by how many named peaks a route crosses (peak_count).
   // That's a computed count, not a column, so fetch a wide set, tally from the
   // route_peaks junction, sort, and paginate client-side.
   if (sortBy === "popular") {
-    const { data, error } = await q.limit(300);
+    // Rank on lightweight rows…
+    const { data, error } = await qRank.limit(300);
     if (error) throw error;
-    const routes = (data as Route[]) ?? [];
-    if (routes.length) {
-      const { data: links } = await supabase
-        .from("route_peaks").select("route_id").in("route_id", routes.map((r) => r.id));
-      const counts = new Map<number, number>();
-      ((links ?? []) as { route_id: number }[]).forEach((l) =>
-        counts.set(l.route_id, (counts.get(l.route_id) ?? 0) + 1));
-      routes.forEach((r) => { r.peak_count = counts.get(r.id) ?? 0; });
-      routes.sort((a, b) =>
-        (b.peak_count! - a.peak_count!) || ((b.distance_km ?? 0) - (a.distance_km ?? 0)));
-    }
-    return routes.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+    const candidates = ((data ?? []) as { id: number; distance_km: number | null }[]);
+    if (candidates.length === 0) return [];
+
+    const { data: links } = await supabase
+      .from("route_peaks").select("route_id").in("route_id", candidates.map((r) => r.id));
+    const counts = new Map<number, number>();
+    ((links ?? []) as { route_id: number }[]).forEach((l) =>
+      counts.set(l.route_id, (counts.get(l.route_id) ?? 0) + 1));
+
+    candidates.sort((a, b) =>
+      ((counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0)) ||
+      ((b.distance_km ?? 0) - (a.distance_km ?? 0)));
+
+    // …then hydrate only the page being shown.
+    const pageIds = candidates.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((r) => r.id);
+    if (pageIds.length === 0) return [];
+    const { data: full } = await supabase.from("routes").select("*").in("id", pageIds);
+    const byId = new Map((((full ?? []) as Route[])).map((r) => [r.id, r]));
+    return pageIds
+      .map((id) => byId.get(id))
+      .filter((r): r is Route => !!r)
+      .map((r) => ({ ...r, peak_count: counts.get(r.id) ?? 0 }));
   }
 
   q = q.order(sortBy, { ascending: false, nullsFirst: false })
