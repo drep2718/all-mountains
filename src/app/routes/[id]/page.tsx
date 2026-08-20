@@ -15,6 +15,7 @@ import DownloadTrailButton from "@/components/DownloadTrailButton";
 import ElevationProfile from "@/components/ElevationProfile";
 import TrailheadActions from "@/components/TrailheadActions";
 import Reviews from "@/components/Reviews";
+import { getDownload } from "@/lib/offline";
 
 export default function RouteDetailPage() {
   const { id } = useParams();
@@ -26,16 +27,38 @@ export default function RouteDetailPage() {
 
   useEffect(() => {
     async function load() {
-      const { data: r } = await supabase.from("routes").select("*").eq("id", id).single();
-      if (r) setRoute(r as Route);
-
-      const { data: rp } = await supabase
-        .from("route_peaks").select("peaks(*)").eq("route_id", id);
-      if (rp) {
-        const ps = (rp as unknown as { peaks: Peak }[]).map((row) => row.peaks).filter(Boolean);
-        ps.sort((a, b) => (b.elevation || 0) - (a.elevation || 0));
-        setPeaks(ps);
+      // With no signal these calls reject rather than resolving empty, so each
+      // is guarded independently: a failed fetch must still end in a rendered
+      // page, not a spinner that never stops.
+      let fetched: Route | null = null;
+      try {
+        const { data } = await supabase.from("routes").select("*").eq("id", id).single();
+        if (data) fetched = data as Route;
+      } catch {
+        /* offline — fall back to the downloaded copy below */
       }
+
+      if (!fetched) {
+        // If this trail was downloaded, its full record is on the device. That
+        // is the entire point of downloading it, so use it rather than showing
+        // "not found" to someone standing at the trailhead.
+        const saved = getDownload(Number(id));
+        if (saved?.payload) fetched = saved.payload as Route;
+      }
+      setRoute(fetched);
+
+      try {
+        const { data: rp } = await supabase
+          .from("route_peaks").select("peaks(*)").eq("route_id", id);
+        if (rp) {
+          const ps = (rp as unknown as { peaks: Peak }[]).map((row) => row.peaks).filter(Boolean);
+          ps.sort((a, b) => (b.elevation || 0) - (a.elevation || 0));
+          setPeaks(ps);
+        }
+      } catch {
+        /* peaks list is enrichment; the trail itself still renders */
+      }
+
       setLoading(false);
     }
     load();

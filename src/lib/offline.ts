@@ -5,6 +5,13 @@ import { estimateBytes, formatBytes, padBBox, tilesForBBox, tileUrl, type BBox }
 
 const INDEX_KEY = "am.offline.index";
 
+/**
+ * Cache holding downloaded map tiles. Unversioned on purpose so a service
+ * worker update never deletes a user's offline maps.
+ * Must match TILES in public/sw.js.
+ */
+export const TILE_CACHE = "am-tiles";
+
 /** Zoom span for a downloaded trail: overview through on-trail detail. */
 export const MIN_Z = 10;
 export const MAX_Z = 14;
@@ -123,7 +130,7 @@ export async function downloadTrail(
   } else {
     // No service worker (e.g. dev over plain http) — still fill the Cache API
     // directly so the tiles are there.
-    const cache = await caches.open("am-tiles-v1");
+    const cache = await caches.open(TILE_CACHE);
     let done = 0;
     for (const url of urls) {
       try {
@@ -142,6 +149,11 @@ export async function downloadTrail(
     }
   }
 
+  // Cache the trail's own page too. Without this the map tiles are on the
+  // device but opening the trail offline lands on the "you're offline" page —
+  // which defeats the point of having downloaded it.
+  await cacheTrailPage(route.id);
+
   const entry: DownloadedTrail = {
     routeId: route.id,
     name: route.name || "Unnamed trail",
@@ -153,6 +165,60 @@ export async function downloadTrail(
   };
   writeIndex([entry, ...readIndex().filter((d) => d.routeId !== route.id)]);
   return entry;
+}
+
+/** Cache name for pages and app code. Matches SHELL in public/sw.js. */
+const SHELL_CACHE = "am-shell-v3";
+
+/**
+ * Cache the trail's page *and the JavaScript that renders it*.
+ *
+ * Caching the HTML alone is not enough: the document is a shell that React
+ * hydrates, so without its chunks an offline visit renders the nav bar and an
+ * endless spinner. The service worker only sees requests made after it takes
+ * control, which misses the very first page load, so the assets this page
+ * actually used are read from the Performance timeline and cached explicitly.
+ */
+async function cacheTrailPage(routeId: number): Promise<void> {
+  if (typeof caches === "undefined") return;
+  try {
+    const cache = await caches.open(SHELL_CACHE);
+
+    const res = await fetch(`/routes/${routeId}`, { headers: { Accept: "text/html" } });
+    if (res.ok && (res.headers.get("content-type") || "").includes("text/html")) {
+      await cache.put(`/routes/${routeId}`, res.clone());
+    }
+
+    const assets = performance
+      .getEntriesByType("resource")
+      .map((e) => e.name)
+      .filter((u) => {
+        try {
+          const url = new URL(u);
+          return (
+            url.origin === location.origin &&
+            url.pathname.startsWith("/_next/") &&
+            !url.searchParams.has("_rsc")
+          );
+        } catch {
+          return false;
+        }
+      });
+
+    await Promise.all(
+      [...new Set(assets)].map(async (u) => {
+        try {
+          if (await cache.match(u)) return;
+          const r = await fetch(u);
+          if (r.ok) await cache.put(u, r.clone());
+        } catch {
+          /* one missing asset must not fail the download */
+        }
+      })
+    );
+  } catch {
+    /* best effort — tiles and trail data are already saved */
+  }
 }
 
 /** Remove a trail's index entry and its cached tiles. */
@@ -171,7 +237,7 @@ export async function removeDownload(routeId: number): Promise<void> {
   }
 
   try {
-    const cache = await caches.open("am-tiles-v1");
+    const cache = await caches.open(TILE_CACHE);
     for (const t of tilesForBBox(entry.bbox, MIN_Z, MAX_Z)) {
       if (stillNeeded.has(`${t.z}/${t.x}/${t.y}`)) continue;
       for (const req of await cache.keys()) {
