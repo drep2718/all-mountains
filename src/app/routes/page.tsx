@@ -20,6 +20,12 @@ const PAGE_SIZE = 24;
 // request and timed out once the table passed ~90k rows.
 const RANK_COLUMNS = "id,distance_km";
 
+// Waymarked networks: international, national, and regional walking routes.
+// With ~95k trails, ranking an arbitrary 300 surfaces forest tracks nobody
+// searches for. A network tag is the strongest "this is a real, signposted
+// trail" signal OSM carries, so popularity draws from that pool first.
+const WAYMARKED = ["iwn", "nwn", "rwn"];
+
 async function fetchRoutes(
   search: string, filters: Filters, place: GeocodeResult | null,
   radiusOn: boolean, sortBy: string, page: number
@@ -28,12 +34,17 @@ async function fetchRoutes(
   // `qRank` returns only the columns needed to rank candidates.
   let q = supabase.from("routes").select("*").not("name", "is", null);
   let qRank = supabase.from("routes").select(RANK_COLUMNS).not("name", "is", null);
+  // Same predicates again, for the unrestricted fallback pool. A PostgREST
+  // builder is single-use, so the two cannot share one object.
+  let qAll = supabase.from("routes").select(RANK_COLUMNS).not("name", "is", null);
   if (search) {
     q = q.ilike("name", `%${search}%`);
     qRank = qRank.ilike("name", `%${search}%`);
+    qAll = qAll.ilike("name", `%${search}%`);
   }
   q = applyRouteFilters(q, filters);
   qRank = applyRouteFilters(qRank, filters);
+  qAll = applyRouteFilters(qAll, filters);
 
   // Area filter: routes whose bbox overlaps the searched place's bbox.
   // Skipped when the radius toggle is off, so a place search can span everywhere.
@@ -47,16 +58,31 @@ async function fetchRoutes(
     qRank = qRank
       .lte("bbox_min_lat", maxLat).gte("bbox_max_lat", minLat)
       .lte("bbox_min_lng", maxLng).gte("bbox_max_lng", minLng);
+    qAll = qAll
+      .lte("bbox_min_lat", maxLat).gte("bbox_max_lat", minLat)
+      .lte("bbox_min_lng", maxLng).gte("bbox_max_lng", minLng);
   }
 
   // "Most popular": rank by how many named peaks a route crosses (peak_count).
   // That's a computed count, not a column, so fetch a wide set, tally from the
   // route_peaks junction, sort, and paginate client-side.
   if (sortBy === "popular") {
-    // Rank on lightweight rows…
-    const { data, error } = await qRank.limit(300);
-    if (error) throw error;
-    const candidates = ((data ?? []) as { id: number; distance_km: number | null }[]);
+    // Prefer signposted routes; fall back to everything if that pool is too
+    // thin once the user's filters, search, or area are applied.
+    type Candidate = { id: number; distance_km: number | null };
+    let candidates: Candidate[] = [];
+
+    const waymarked = await qRank.in("network", WAYMARKED).limit(300);
+    if (!waymarked.error) candidates = (waymarked.data ?? []) as Candidate[];
+
+    if (candidates.length < PAGE_SIZE * (page + 1)) {
+      const all = await qAll.limit(300);
+      if (all.error && candidates.length === 0) throw all.error;
+      const seen = new Set(candidates.map((c) => c.id));
+      for (const c of ((all.data ?? []) as Candidate[])) {
+        if (!seen.has(c.id)) candidates.push(c);
+      }
+    }
     if (candidates.length === 0) return [];
 
     const { data: links } = await supabase
