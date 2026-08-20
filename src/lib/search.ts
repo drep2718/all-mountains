@@ -36,6 +36,9 @@ function tally(
 // Lightweight peak-name lookup for the map/location search — just enough to
 // place a pin and fly to it. Ordered iconic-then-tallest so "Rainier" surfaces
 // the famous one first.
+/** Tolerance for "this trail reaches that summit", in degrees (~2 km). */
+const NEAR_DEG = 0.02;
+
 export interface PeakHit {
   id: number;
   name: string | null;
@@ -158,6 +161,21 @@ export async function searchAll(query: string, limit = 24): Promise<SearchResult
 
   for (const p of peaks) p.trail_count = trailCounts.get(p.id) ?? 0;
   for (const r of routes) r.peak_count = peakCounts.get(r.id) ?? 0;
+
+  // route_peaks is filled by a batch spatial job, so trails imported since it
+  // last ran are missing from it and every peak would read "no mapped trails".
+  // Both sets are already in memory here, so fall back to a bounding-box test.
+  for (const p of peaks) {
+    if (p.trail_count > 0) continue;
+    p.trail_count = routes.filter(
+      (r) =>
+        r.bbox_min_lat != null &&
+        p.latitude >= r.bbox_min_lat - NEAR_DEG &&
+        p.latitude <= r.bbox_max_lat + NEAR_DEG &&
+        p.longitude >= r.bbox_min_lng - NEAR_DEG &&
+        p.longitude <= r.bbox_max_lng + NEAR_DEG
+    ).length;
+  }
 
   // Highest / most iconic first so the marquee summit leads.
   peaks.sort((a, b) =>

@@ -30,10 +30,38 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: "diff-desc", label: "Hardest" },
 ];
 
+/** Trails whose bounding box covers the peak, resolved live. */
+async function trailsNearPeak(
+  supabase: ReturnType<typeof createClient>,
+  peakId: number
+): Promise<Route[]> {
+  const { data: peak } = await supabase
+    .from("peaks").select("latitude,longitude").eq("id", peakId).maybeSingle();
+  if (!peak) return [];
+  const { latitude: lat, longitude: lng } = peak as { latitude: number; longitude: number };
+
+  const { data } = await supabase
+    .from("routes")
+    .select("*")
+    .not("name", "is", null)
+    .lte("bbox_min_lat", lat + NEAR).gte("bbox_max_lat", lat - NEAR)
+    .lte("bbox_min_lng", lng + NEAR).gte("bbox_max_lng", lng - NEAR)
+    .limit(25);
+
+  return ((data ?? []) as Route[]);
+}
+
+/** A trail counts as reaching this summit if its bbox contains the peak. */
+const NEAR = 0.02; // degrees, ~2 km
+
 /**
  * All trails that summit a given peak, sortable by "commonality" (how many peaks
- * the trail connects) or difficulty. The junction (route_peaks) is populated by
- * the link_route_peaks() spatial RPC — this just reads the reverse direction.
+ * the trail connects) or difficulty.
+ *
+ * Reads the precomputed route_peaks junction first. That table is filled by a
+ * batch spatial job, so newly imported trails are absent from it until the job
+ * runs again — which would make a peak claim it has no trails when several pass
+ * over it. When the junction is empty we fall back to a live bounding-box query.
  */
 export default function TrailsForPeak({ peakId }: { peakId: number }) {
   const supabase = createClient();
@@ -48,11 +76,15 @@ export default function TrailsForPeak({ peakId }: { peakId: number }) {
         .select("routes(*)")
         .eq("peak_id", peakId);
 
-      const routes = ((links ?? []) as unknown as { routes: Route | null }[])
+      let routes = ((links ?? []) as unknown as { routes: Route | null }[])
         .map((l) => l.routes)
         .filter((r): r is Route => !!r);
 
-      if (routes.length === 0) return [];
+      if (routes.length === 0) {
+        routes = await trailsNearPeak(supabase, peakId);
+        // Nothing precomputed to count against, so report each trail plainly.
+        return routes.map((r) => ({ ...r, peak_count: r.peak_count ?? 1 }));
+      }
 
       // 2. Commonality = how many peaks each of those trails connects.
       //    One extra query, tallied client-side — no new RPC needed.
