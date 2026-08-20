@@ -24,6 +24,8 @@ interface MapProps {
   activeRouteId?: number;
   // When set, the map flies to fit this [minLng, minLat, maxLng, maxLat] box.
   focusBounds?: [number, number, number, number] | null;
+  /** Show satellite imagery under the trails and peaks. */
+  satellite?: boolean;
 }
 
 function peaksToGeoJSON(peaks: Peak[]): GeoJSON.FeatureCollection {
@@ -64,6 +66,7 @@ export default function Map({
   onRouteClick,
   activeRouteId,
   focusBounds,
+  satellite = false,
 }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -116,6 +119,23 @@ export default function Map({
     );
 
     m.on("load", () => {
+      // --- SATELLITE (hidden until toggled) ---
+      // Added as a raster layer rather than swapping the map style: setStyle
+      // tears down every custom source and layer below, which would have to be
+      // rebuilt on each toggle. This just changes one layer's visibility.
+      m.addSource("satellite", {
+        type: "raster",
+        url: "mapbox://mapbox.satellite",
+        tileSize: 256,
+      });
+      m.addLayer({
+        id: "satellite",
+        type: "raster",
+        source: "satellite",
+        layout: { visibility: "none" },
+        paint: { "raster-opacity": 1 },
+      });
+
       // --- ROUTES (drawn under peaks) ---
       m.addSource("routes", { type: "geojson", data: routesToGeoJSON([]) });
       m.addLayer({
@@ -273,6 +293,9 @@ export default function Map({
       emitBounds();
     });
 
+    // Toggle satellite imagery. Gated on `ready` via the effect below so it
+    // never runs before the layer exists.
+
     // Guarantee an initial fetch once the map has settled (covers the race
     // where `load` fires before the container has final dimensions)
     m.once("idle", emitBounds);
@@ -314,6 +337,14 @@ export default function Map({
     const src = map.current.getSource("routes") as mapboxgl.GeoJSONSource | undefined;
     src?.setData(routesToGeoJSON(routes));
   }, [routes, ready]);
+
+  // Satellite imagery on/off. Trails and peaks stay on top either way.
+  useEffect(() => {
+    if (!ready || !map.current) return;
+    const m = map.current;
+    if (!m.getLayer("satellite")) return;
+    m.setLayoutProperty("satellite", "visibility", satellite ? "visible" : "none");
+  }, [satellite, ready]);
 
   // Fly to fit a focus bounding box (used when isolating one route)
   useEffect(() => {
