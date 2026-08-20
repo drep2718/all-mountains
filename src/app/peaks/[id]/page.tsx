@@ -10,6 +10,7 @@ import { peakImageUrl, hasRealPhoto } from "@/lib/peakImage";
 import { reverseGeocode, type PlaceContext } from "@/lib/geocode";
 import TrailsForPeak from "@/components/TrailsForPeak";
 import SaveToListButton from "@/components/SaveToListButton";
+import Reviews from "@/components/Reviews";
 
 export default function PeakDetailPage() {
   const { id } = useParams();
@@ -203,6 +204,11 @@ export default function PeakDetailPage() {
 
       {/* Trails that summit this peak (sortable by commonality / difficulty) */}
       <TrailsForPeak peakId={peak.id} />
+
+      {/* Ratings, conditions, and written reviews */}
+      <div className="mt-4">
+        <Reviews subject="peak" id={peak.id} />
+      </div>
 
       {/* About (Wikipedia description) */}
       {peak.description && (

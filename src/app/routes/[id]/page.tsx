@@ -14,6 +14,7 @@ import SaveToListButton from "@/components/SaveToListButton";
 import DownloadTrailButton from "@/components/DownloadTrailButton";
 import ElevationProfile from "@/components/ElevationProfile";
 import TrailheadActions from "@/components/TrailheadActions";
+import Reviews from "@/components/Reviews";
 
 export default function RouteDetailPage() {
   const { id } = useParams();
@@ -177,6 +178,11 @@ export default function RouteDetailPage() {
           <p className="text-sm leading-relaxed text-ink-muted">{route.description}</p>
         </div>
       )}
+
+      {/* Ratings, conditions, and written reviews */}
+      <div className="mt-4">
+        <Reviews subject="route" id={route.id} />
+      </div>
 
       {/* Peaks along the route */}
       <h2 className="mt-8 mb-3 font-display text-xl font-bold text-ink">

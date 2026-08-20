@@ -25,11 +25,15 @@ export default function OfflineProvider({ children }: { children: React.ReactNod
     window.addEventListener("online", up);
     window.addEventListener("offline", down);
 
-    if ("serviceWorker" in navigator) {
+    // Not registered in development: Next's dev chunks have stable filenames,
+    // so any caching layer serves yesterday's JavaScript and breaks HMR.
+    // Production filenames are content-hashed, so a new build simply requests
+    // new URLs and the cache can never go stale.
+    if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
       // After load so registration never competes with first paint.
       const register = () => {
         navigator.serviceWorker.register("/sw.js").catch(() => {
-          /* unsupported context (e.g. plain-http dev) — app still works */
+          /* unsupported context (e.g. plain-http) — app still works online */
         });
       };
       if (document.readyState === "complete") register();
