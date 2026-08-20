@@ -29,6 +29,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // route's bounding box (~1.1 km) — close enough to be the summit it serves.
 const PAD = 0.01;
 
+/** Bounds lookups in flight at once. Kept modest so the API stays responsive. */
+const CONCURRENCY = 6;
+
 async function main() {
   const args = process.argv.slice(2);
   const ci = args.indexOf("--chunk");
@@ -58,18 +61,31 @@ async function main() {
 
     const rows: { route_id: number; peak_id: number }[] = [];
 
-    for (const r of routes) {
-      if (r.bbox_min_lat == null) continue;
-      const { data: peaks } = await supabase.rpc("peaks_in_bounds", {
-        min_lat: r.bbox_min_lat - PAD, min_lng: r.bbox_min_lng - PAD,
-        max_lat: r.bbox_max_lat + PAD, max_lng: r.bbox_max_lng + PAD,
-        min_elevation: 0, lim: 40,
-      });
-      for (const p of (peaks ?? []) as { id: number; name: string | null }[]) {
-        if (!p.name) continue; // only named summits are worth surfacing
-        rows.push({ route_id: r.id, peak_id: p.id });
+    // One bounds lookup per route, a few in flight at a time. Serially this is
+    // ~200 ms x 95k routes — many hours; the DB handles a small amount of
+    // concurrency comfortably and cuts that to well under one.
+    let cursor = 0;
+    async function worker() {
+      for (;;) {
+        const r = routes[cursor++];
+        if (!r) return;
+        if (r.bbox_min_lat == null) continue;
+        try {
+          const { data: peaks } = await supabase.rpc("peaks_in_bounds", {
+            min_lat: r.bbox_min_lat - PAD, min_lng: r.bbox_min_lng - PAD,
+            max_lat: r.bbox_max_lat + PAD, max_lng: r.bbox_max_lng + PAD,
+            min_elevation: 0, lim: 40,
+          });
+          for (const p of (peaks ?? []) as { id: number; name: string | null }[]) {
+            if (!p.name) continue; // only named summits are worth surfacing
+            rows.push({ route_id: r.id, peak_id: p.id });
+          }
+        } catch {
+          /* skip this route rather than abandoning the chunk */
+        }
       }
     }
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
     if (rows.length) {
       for (let i = 0; i < rows.length; i += 500) {
