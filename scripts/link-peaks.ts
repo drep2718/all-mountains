@@ -32,14 +32,20 @@ const PAD = 0.01;
 /** Bounds lookups in flight at once. Kept modest so the API stays responsive. */
 const CONCURRENCY = 6;
 
+/** Consecutive fetch failures before this job stops instead of retrying. */
+const MAX_FAILURES = 6;
+
 async function main() {
   const args = process.argv.slice(2);
   const ci = args.indexOf("--chunk");
   const CHUNK = ci >= 0 && args[ci + 1] ? parseInt(args[ci + 1], 10) : 200;
 
-  let after = 0;
+  // Resume from a known id so an interrupted run doesn't redo everything.
+  const ai = args.indexOf("--after");
+  let after = ai >= 0 && args[ai + 1] ? parseInt(args[ai + 1], 10) : 0;
   let processed = 0;
   let links = 0;
+  let consecutiveFailures = 0;
 
   console.log(`\n🔗 Linking routes to peaks (chunk ${CHUNK})\n`);
 
@@ -52,10 +58,30 @@ async function main() {
       .limit(CHUNK);
 
     if (error) {
-      console.error(`fetch error: ${error.message}`);
-      await sleep(2000);
+      consecutiveFailures++;
+      console.error(`fetch error (${consecutiveFailures}/${MAX_FAILURES}): ${error.message}`);
+
+      // Give up rather than retry forever. An earlier version looped every two
+      // seconds with no ceiling; when the database went down it kept hammering
+      // it for hours, which held the instance under load instead of letting it
+      // recover. A dead database is a reason to stop, not to try harder.
+      if (consecutiveFailures >= MAX_FAILURES) {
+        console.error(
+          `\n✗ Giving up after ${MAX_FAILURES} consecutive failures.` +
+          `\n  The database is not answering. Fix it first, then re-run:` +
+          `\n    npx tsx --env-file=.env.local scripts/link-peaks.ts --after ${after}\n`
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      // Exponential backoff, capped — back off *harder* when it keeps failing.
+      const wait = Math.min(60_000, 2000 * 2 ** (consecutiveFailures - 1));
+      console.error(`  backing off ${Math.round(wait / 1000)}s`);
+      await sleep(wait);
       continue;
     }
+    consecutiveFailures = 0;
     const routes = (data ?? []) as RouteRow[];
     if (routes.length === 0) break;
 
