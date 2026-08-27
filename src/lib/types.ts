@@ -86,7 +86,13 @@ export interface Route {
   route_type: string | null;    // "Loop" | "Out & Back"
   est_time_min: number | null;  // Naismith estimate
   features: string[] | null;    // Views / Waterfalls / Lakes / Summits ...
-  geometry: GeoJSON.LineString | GeoJSON.MultiLineString;
+  /**
+   * Trail geometry as an encoded polyline; ';' separates the segments of a
+   * multi-part trail. Decode with decodeSegments() from lib/polyline.
+   * Replaced a GeoJSON jsonb column plus a derived PostGIS geography — together
+   * ~185 MB across the catalogue, versus ~4 MB this way.
+   */
+  poly: string | null;
   bbox_min_lat: number;
   bbox_min_lng: number;
   bbox_max_lat: number;
@@ -94,7 +100,14 @@ export interface Route {
   country: string | null;
   region: string | null;
   description: string | null;
-  tags: Record<string, string>;
+  // Promoted from the old `tags` jsonb — only the fields the UI reads.
+  operator: string | null;
+  ref: string | null;
+  surface: string | null;
+  dog_access: string | null;
+  bicycle: string | null;
+  wheelchair: string | null;
+  fee: string | null;
   peak_count?: number;
 }
 
@@ -122,15 +135,20 @@ export function formatDuration(minutes: number | null): string {
   return `${h}h ${m}m`;
 }
 
-// AllTrails-style access info pulled from OSM tags
-export function accessInfo(tags: Record<string, string> = {}): string[] {
+/**
+ * AllTrails-style access info. Reads the promoted columns rather than a `tags`
+ * blob — storing every OSM tag cost ~22 MB across the catalogue for six fields
+ * the UI ever looked at.
+ */
+export function accessInfo(
+  route: Pick<Route, "dog_access" | "bicycle" | "wheelchair" | "fee">
+): string[] {
   const out: string[] = [];
-  if (tags.dog === "yes" || tags.dog === "leashed") out.push("Dogs allowed");
-  if (tags.dog === "no") out.push("No dogs");
-  if (tags.bicycle === "yes") out.push("Bikes allowed");
-  if (tags.wheelchair === "yes") out.push("Wheelchair accessible");
-  if (tags.fee === "yes") out.push("Entry fee");
-  if (tags.toll === "yes") out.push("Toll");
+  if (route.dog_access === "yes" || route.dog_access === "leashed") out.push("Dogs allowed");
+  if (route.dog_access === "no") out.push("No dogs");
+  if (route.bicycle === "yes") out.push("Bikes allowed");
+  if (route.wheelchair === "yes") out.push("Wheelchair accessible");
+  if (route.fee === "yes") out.push("Entry fee");
   return out;
 }
 

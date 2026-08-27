@@ -5,6 +5,7 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { Peak, Route } from "@/lib/types";
 import { getDifficulty, DIFFICULTY_HEX } from "@/lib/types";
+import { decodeSegments } from "@/lib/polyline";
 
 export interface Bounds {
   minLat: number;
@@ -49,11 +50,20 @@ function peaksToGeoJSON(peaks: Peak[]): GeoJSON.FeatureCollection {
 function routesToGeoJSON(routes: Route[]): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
-    features: routes.map((r) => ({
-      type: "Feature",
-      geometry: r.geometry,
-      properties: { id: r.id, name: r.name || "Unnamed Route" },
-    })),
+    // Trails are stored as encoded polylines; Mapbox needs GeoJSON, so decode
+    // on the way out. It is a tight loop over a short string per trail.
+    features: routes.flatMap((r) => {
+      const lines = decodeSegments(r.poly);
+      if (lines.length === 0) return [];
+      return [{
+        type: "Feature" as const,
+        geometry:
+          lines.length === 1
+            ? { type: "LineString" as const, coordinates: lines[0] }
+            : { type: "MultiLineString" as const, coordinates: lines },
+        properties: { id: r.id, name: r.name || "Unnamed Route" },
+      }];
+    }),
   };
 }
 

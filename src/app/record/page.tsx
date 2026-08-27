@@ -26,7 +26,7 @@ function RecordInner() {
   }, [routeId]);
 
   const trailLines = useMemo(
-    () => (route ? toLines(route.geometry) : undefined),
+    () => (route ? toLines(route.poly) : undefined),
     [route]
   );
 

@@ -10,6 +10,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { toStored, type LngLat } from "../src/lib/polyline";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -263,11 +264,6 @@ function buildRoute(rel: OSMRelation, countryName: string, children: Map<number,
 
   if (lines.length === 0) return null;
 
-  const geometry =
-    lines.length === 1
-      ? { type: "LineString" as const, coordinates: lines[0] }
-      : { type: "MultiLineString" as const, coordinates: lines };
-
   const tags = rel.tags || {};
   const distanceKm = tags.distance ? parseFloat(tags.distance) : Math.round(distance * 10) / 10;
   const ascentM = tags.ascent ? parseFloat(tags.ascent) : null;
@@ -295,8 +291,9 @@ function buildRoute(rel: OSMRelation, countryName: string, children: Map<number,
     descent_m: tags.descent ? parseFloat(tags.descent) : null,
     route_type: routeType,
     est_time_min: estTimeMin || null,
-    geometry,
-    // `path` (PostGIS geography) is computed in the DB by a trigger from `geometry`
+    // Simplified encoded polyline instead of GeoJSON plus a derived PostGIS
+    // geography: ~40x smaller, which is what makes the catalogue fit.
+    poly: toStored(lines as LngLat[][]),
     bbox_min_lat: minLat,
     bbox_min_lng: minLng,
     bbox_max_lat: maxLat,
@@ -304,7 +301,14 @@ function buildRoute(rel: OSMRelation, countryName: string, children: Map<number,
     country: countryName,
     region: tags["addr:state"] || tags.region || null,
     description: tags.description || null,
-    tags,
+    // Only the tags the UI reads — the full blob cost ~22 MB for six fields.
+    operator: tags.operator || null,
+    ref: tags.ref || null,
+    surface: tags.surface || null,
+    dog_access: tags.dog || null,
+    bicycle: tags.bicycle || null,
+    wheelchair: tags.wheelchair || null,
+    fee: tags.fee || null,
   };
 }
 

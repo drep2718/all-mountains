@@ -76,9 +76,8 @@ export default function RouteDetailPage() {
   }
 
   const mapUrl = routeStaticMapUrl(route, 800, 420);
-  const tags = route.tags || {};
-  const access = accessInfo(tags);
-  const surface = surfaceLabel(tags.surface);
+  const access = accessInfo(route);
+  const surface = surfaceLabel(route.surface ?? undefined);
 
   const stats = [
     { label: "Length", value: route.distance_km != null ? `${route.distance_km.toFixed(1)} km` : "—" },
@@ -159,7 +158,7 @@ export default function RouteDetailPage() {
       {/* Elevation profile */}
       <div className="mt-4">
         <ElevationProfile
-          geometry={route.geometry}
+          geometry={route.poly}
           ascentM={route.ascent_m}
           descentM={route.descent_m}
           distanceKm={route.distance_km}
@@ -174,8 +173,8 @@ export default function RouteDetailPage() {
             {surface && <Row label="Surface" value={surface} />}
             {route.descent_m != null && <Row label="Descent" value={`${route.descent_m.toLocaleString()} m`} />}
             <Row label="Peaks crossed" value={peaks.length.toString()} />
-            {tags.operator && <Row label="Maintained by" value={tags.operator} />}
-            {tags.ref && <Row label="Trail ref" value={tags.ref} />}
+            {route.operator && <Row label="Maintained by" value={route.operator} />}
+            {route.ref && <Row label="Trail ref" value={route.ref} />}
           </dl>
         </div>
 

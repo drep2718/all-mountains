@@ -14,7 +14,7 @@ function trailhead(geometry: unknown): { lat: number; lng: number } | null {
 
 export default function TrailheadActions({ route }: { route: Route }) {
   const [copied, setCopied] = useState(false);
-  const head = trailhead(route.geometry);
+  const head = trailhead(route.poly);
   if (!head) return null;
 
   const coords = `${head.lat.toFixed(6)},${head.lng.toFixed(6)}`;

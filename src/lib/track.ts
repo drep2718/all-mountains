@@ -1,6 +1,8 @@
 // Geo math for GPS track recording. Pure functions, no React, no browser APIs —
 // so the safety-critical parts (distance, elevation, off-route) are testable.
 
+import { decodeSegments } from "./polyline";
+
 export interface TrackPoint {
   lat: number;
   lng: number;
@@ -176,8 +178,14 @@ export function distanceToTrailM(
   return best;
 }
 
-/** Normalize LineString / MultiLineString geometry to a list of lines. */
+/**
+ * Normalize stored trail geometry to a list of [lng,lat] lines.
+ *
+ * Accepts the encoded-polyline string trails are stored as, and still accepts
+ * raw GeoJSON so a recorded track or an imported GPX can be passed straight in.
+ */
 export function toLines(geometry: unknown): number[][][] {
+  if (typeof geometry === "string") return decodeSegments(geometry);
   const g = geometry as { type?: string; coordinates?: unknown };
   if (!g?.type || !g.coordinates) return [];
   if (g.type === "LineString") return [g.coordinates as number[][]];

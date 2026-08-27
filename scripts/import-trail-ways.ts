@@ -13,6 +13,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { toStored, type LngLat } from "../src/lib/polyline";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -147,13 +148,22 @@ function buildWay(w: OSMWay, country: string) {
     descent_m: null,
     route_type: loop ? "Loop" : "Out & Back",
     est_time_min: Math.round(distanceKm * 12 + ((ascentM || 0) / 100) * 10) || null,
-    geometry: { type: "LineString" as const, coordinates: coords },
+    // Simplified encoded polyline instead of GeoJSON: ~40x smaller, and the
+    // difference between fitting a 500 MB database and not.
+    poly: toStored([coords as LngLat[]]),
     bbox_min_lat: minLat, bbox_min_lng: minLng,
     bbox_max_lat: maxLat, bbox_max_lng: maxLng,
     country,
     region: tags["addr:state"] || null,
     description: tags.description || null,
-    tags,
+    // Only the tags the UI reads — the full blob cost ~22 MB for six fields.
+    operator: tags.operator || null,
+    ref: tags.ref || null,
+    surface: tags.surface || null,
+    dog_access: tags.dog || null,
+    bicycle: tags.bicycle || null,
+    wheelchair: tags.wheelchair || null,
+    fee: tags.fee || null,
   };
 }
 

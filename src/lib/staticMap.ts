@@ -3,6 +3,7 @@
 // no photo backfill or storage needed.
 
 import type { Route } from "./types";
+import { decodeSegments } from "./polyline";
 
 // Google polyline encoding (precision 5) — the compact format Mapbox's
 // Static API accepts for path overlays.
@@ -33,14 +34,9 @@ function encodePolyline(coords: [number, number][]): string {
   return output;
 }
 
-// Flatten a LineString / MultiLineString into a single coordinate list.
-function flatten(geometry: Route["geometry"]): [number, number][] {
-  if (!geometry) return [];
-  if (geometry.type === "LineString") {
-    return geometry.coordinates as [number, number][];
-  }
-  // MultiLineString — concatenate segments
-  return (geometry.coordinates as [number, number][][]).flat();
+// Flatten stored segments into a single coordinate list.
+function flatten(poly: Route["poly"]): [number, number][] {
+  return decodeSegments(poly).flat();
 }
 
 // Downsample so the encoded URL stays well under Mapbox's length limit.
@@ -54,7 +50,7 @@ function sample(coords: [number, number][], max = 90): [number, number][] {
 }
 
 export function routeStaticMapUrl(
-  route: Pick<Route, "geometry">,
+  route: Pick<Route, "poly">,
   width = 640,
   height = 360,
   color = "c95d27"
@@ -62,7 +58,7 @@ export function routeStaticMapUrl(
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
   if (!token) return null;
 
-  const coords = sample(flatten(route.geometry));
+  const coords = sample(flatten(route.poly));
   if (coords.length < 2) return null;
 
   const encoded = encodePolyline(coords);
