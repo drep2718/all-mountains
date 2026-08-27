@@ -22,11 +22,12 @@
 -- --- 0. Measure first -------------------------------------------------------
 -- Run alone. If `routes` is not the largest table, stop and reassess rather
 -- than deleting anything.
-select relname as table_name,
+select c.relname                                     as table_name,
        pg_size_pretty(pg_total_relation_size(c.oid)) as total,
        pg_size_pretty(pg_relation_size(c.oid))       as heap,
        pg_size_pretty(pg_indexes_size(c.oid))        as indexes,
-       n_live_tup as live_rows, n_dead_tup as dead_rows
+       s.n_live_tup                                  as live_rows,
+       s.n_dead_tup                                  as dead_rows
 from pg_class c
 join pg_namespace n on n.oid = c.relnamespace
 left join pg_stat_user_tables s on s.relid = c.oid
@@ -37,8 +38,16 @@ select pg_size_pretty(pg_database_size(current_database())) as database_total;
 
 
 -- --- 1. Rebuild `routes` ----------------------------------------------------
--- TRUNCATE rather than DELETE: it reclaims the file immediately without needing
--- a VACUUM FULL, and on a disk-pressured instance that difference matters.
+-- When the disk fills, Supabase sets the database read-only to protect it, so
+-- every statement below would be rejected. This lifts it for THIS SESSION only
+-- — long enough to delete the data that caused the problem. It does not change
+-- the project setting; a new connection is read-only again.
+set session characteristics as transaction read write;
+
+-- TRUNCATE rather than DELETE, and this is the important part under disk
+-- pressure: DELETE writes a WAL record per row and needs free space to run, on
+-- a volume that has none. TRUNCATE unlinks the file — almost no WAL, and the
+-- space comes back immediately without a VACUUM FULL.
 -- Every row here is re-importable from OpenStreetMap, so nothing is lost.
 -- CASCADE also clears route_peaks, which references it.
 truncate table public.routes cascade;

@@ -18,11 +18,11 @@
 -- Run this alone first. If routes is only a few hundred MB, disk is not the
 -- problem and you should stop and look elsewhere rather than deleting data.
 select
-  relname                                          as table_name,
+  c.relname                                        as table_name,
   pg_size_pretty(pg_total_relation_size(c.oid))    as total,
   pg_size_pretty(pg_relation_size(c.oid))          as heap,
   pg_size_pretty(pg_indexes_size(c.oid))           as indexes,
-  n_live_tup                                       as approx_rows
+  s.n_live_tup                                     as approx_rows
 from pg_class c
 join pg_namespace n on n.oid = c.relnamespace
 left join pg_stat_user_tables s on s.relid = c.oid
