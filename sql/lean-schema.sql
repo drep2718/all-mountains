@@ -38,11 +38,15 @@ select pg_size_pretty(pg_database_size(current_database())) as database_total;
 
 
 -- --- 1. Rebuild `routes` ----------------------------------------------------
--- When the disk fills, Supabase sets the database read-only to protect it, so
--- every statement below would be rejected. This lifts it for THIS SESSION only
--- — long enough to delete the data that caused the problem. It does not change
--- the project setting; a new connection is read-only again.
-set session characteristics as transaction read write;
+-- When the disk fills, Supabase protects the database by setting
+-- `default_transaction_read_only`, and every write below is rejected with
+-- 25006. This lifts it for THIS SESSION only — long enough to delete the data
+-- that caused the problem. A new connection is read-only again.
+--
+-- It must be `default_transaction_read_only`; `set session characteristics as
+-- transaction read write` does not override the flag Supabase sets.
+-- Run it in the same editor tab, in the same run, as the truncate below.
+set default_transaction_read_only = 'off';
 
 -- TRUNCATE rather than DELETE, and this is the important part under disk
 -- pressure: DELETE writes a WAL record per row and needs free space to run, on
