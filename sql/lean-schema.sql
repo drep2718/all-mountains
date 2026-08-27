@@ -22,7 +22,7 @@
 -- --- 0. Measure first -------------------------------------------------------
 -- Run alone. If `routes` is not the largest table, stop and reassess rather
 -- than deleting anything.
-select relname as table,
+select relname as table_name,
        pg_size_pretty(pg_total_relation_size(c.oid)) as total,
        pg_size_pretty(pg_relation_size(c.oid))       as heap,
        pg_size_pretty(pg_indexes_size(c.oid))        as indexes,
