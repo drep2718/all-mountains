@@ -2,8 +2,8 @@
  * Hiking Routes Import Script
  *
  * Fetches hiking route relations (route=hiking) from OpenStreetMap with their
- * full geometry, stores them in the `routes` table, then links each route to
- * the peaks it passes near (via the link_route_peaks DB function).
+ * geometry, and stores them in the `routes` table as encoded polylines.
+ * Linking trails to peaks is a separate pass: scripts/link-peaks.ts.
  *
  * Usage: npx tsx --env-file=.env.local scripts/import-routes.ts [country-code]
  *   npx tsx --env-file=.env.local scripts/import-routes.ts GR
@@ -383,11 +383,8 @@ async function main() {
     console.log();
   }
 
-  console.log(`\n  Linking routes to nearby peaks (this may take a moment)...`);
-  const { error: linkErr } = await supabase.rpc("link_route_peaks", { buffer_m: 500 });
-  if (linkErr) console.error(`  Link error: ${linkErr.message}`);
-  else console.log(`  ✓ Routes linked to peaks`);
-
+  // Linking is a separate pass (scripts/link-peaks.ts). Doing it here meant a
+  // single statement spanning every route, which outgrew the statement timeout.
   console.log(`\n✅ Route import complete! ${total} routes.`);
 }
 
