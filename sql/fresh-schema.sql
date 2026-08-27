@@ -20,6 +20,9 @@
 --     Their absence is what made "Longest" and "Most time" time out.
 -- ============================================================================
 
+-- Supabase installs extensions into the `extensions` schema, so the operator
+-- class below is referenced unqualified and resolved through search_path.
+-- Hard-coding public.gin_trgm_ops fails on a fresh project.
 create extension if not exists pg_trgm;
 
 -- ============================================================================
@@ -49,7 +52,7 @@ create index if not exists peaks_lat_lng_idx    on public.peaks (latitude, longi
 create index if not exists peaks_iconic_idx     on public.peaks (is_iconic) where is_iconic;
 create index if not exists peaks_prominence_idx on public.peaks (prominence desc nulls last);
 create index if not exists peaks_popular_idx    on public.peaks (is_iconic desc nulls last, prominence desc nulls last);
-create index if not exists peaks_name_trgm_idx  on public.peaks using gin (name public.gin_trgm_ops);
+create index if not exists peaks_name_trgm_idx  on public.peaks using gin (name gin_trgm_ops);
 create index if not exists peaks_country_idx    on public.peaks (country);
 
 -- ============================================================================
@@ -102,7 +105,7 @@ create index if not exists routes_network_idx   on public.routes (network);
 create index if not exists routes_difficulty_idx on public.routes (difficulty);
 create index if not exists routes_named_idx     on public.routes (id) where name is not null;
 create index if not exists routes_features_idx  on public.routes using gin (features);
-create index if not exists routes_name_trgm_idx on public.routes using gin (name public.gin_trgm_ops);
+create index if not exists routes_name_trgm_idx on public.routes using gin (name gin_trgm_ops);
 
 -- ============================================================================
 -- ROUTE ↔ PEAK JUNCTION
