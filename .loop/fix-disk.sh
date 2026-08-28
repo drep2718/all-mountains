@@ -17,18 +17,27 @@ cd "$(dirname "$0")/.."
 CONN="${1:-}"
 if [ -z "$CONN" ]; then
   cat <<'USAGE'
-usage: ./.loop/fix-disk.sh "<direct connection string, port 5432>"
+usage: ./.loop/fix-disk.sh "<session-mode connection string>"
 
-Easiest form — leave the password OUT and psql will prompt for it:
+Dashboard → Settings → Database → Connection string. Three are offered; only
+two of them can work here:
 
-    ./.loop/fix-disk.sh "postgresql://postgres@db.<project-ref>.supabase.co:5432/postgres"
+  Session pooler     aws-0-<region>.pooler.supabase.com:5432   ← USE THIS
+  Direct connection  db.<project-ref>.supabase.co:5432          (IPv6 only,
+                                                                often refused)
+  Transaction pooler aws-0-<region>.pooler.supabase.com:6543    ✗ cannot work
 
-Prompting is better than pasting it: a password containing @ : / # or ? breaks
-a URI unless percent-encoded, and typing it inline puts it in your shell
-history. Find or reset it under Settings → Database → Database password.
+Freeing the disk needs `set default_transaction_read_only = off` to still be in
+effect when the DROP runs. Transaction mode (6543) hands each statement a
+different connection, so the setting is gone by then — that is why the SQL
+editor kept failing. Session mode holds one connection for the whole script.
 
-The port must be 5432 (direct). 6543 is the pooler, which runs in transaction
-mode and discards the session setting this needs.
+Leave the password OUT and psql will prompt:
+
+    ./.loop/fix-disk.sh "postgresql://postgres.<project-ref>@aws-0-<region>.pooler.supabase.com:5432/postgres"
+
+Note the username is postgres.<project-ref> for the pooler, not plain postgres.
+Find or reset the password under Settings → Database → Database password.
 USAGE
   exit 1
 fi
@@ -52,9 +61,17 @@ fi
 
 case "$CONN" in
   *:6543/*)
-    echo "✗ That is the pooler port (6543). Session settings do not persist there,"
-    echo "  which is the reason this has been failing. Use the direct string (5432)."
+    echo "✗ Port 6543 is the transaction pooler. It gives each statement a different"
+    echo "  connection, so the read-write override is gone before the DROP runs —"
+    echo "  exactly why the SQL editor kept failing."
+    echo "  Use the SESSION pooler instead (same host, port 5432)."
     exit 1
+    ;;
+  *db.*.supabase.co:5432*)
+    echo "note: that is the direct connection, which is IPv6-only and currently"
+    echo "      refusing connections on this project. If it fails, switch to the"
+    echo "      session pooler: aws-0-<region>.pooler.supabase.com:5432"
+    echo
     ;;
 esac
 
