@@ -16,12 +16,33 @@ cd "$(dirname "$0")/.."
 
 CONN="${1:-}"
 if [ -z "$CONN" ]; then
-  echo "usage: ./.loop/fix-disk.sh \"<direct connection string, port 5432>\""
-  echo
-  echo "Find it in: Dashboard → Settings → Database → Connection string → URI"
-  echo "Make sure the port is 5432 (direct), not 6543 (pooler)."
+  cat <<'USAGE'
+usage: ./.loop/fix-disk.sh "<direct connection string, port 5432>"
+
+Easiest form — leave the password OUT and psql will prompt for it:
+
+    ./.loop/fix-disk.sh "postgresql://postgres@db.<project-ref>.supabase.co:5432/postgres"
+
+Prompting is better than pasting it: a password containing @ : / # or ? breaks
+a URI unless percent-encoded, and typing it inline puts it in your shell
+history. Find or reset it under Settings → Database → Database password.
+
+The port must be 5432 (direct). 6543 is the pooler, which runs in transaction
+mode and discards the session setting this needs.
+USAGE
   exit 1
 fi
+
+# A literal placeholder is a much more likely mistake than a real password
+# that happens to look like one.
+case "$CONN" in
+  *YOUR_PASSWORD*|*PASSWORD@*|*\[YOUR-PASSWORD\]*)
+    echo "✗ That still contains the placeholder text, not your real password."
+    echo "  Either substitute it, or drop the password entirely and let psql ask:"
+    echo "    postgresql://postgres@db.<project-ref>.supabase.co:5432/postgres"
+    exit 1
+    ;;
+esac
 
 if ! command -v psql >/dev/null 2>&1; then
   echo "psql not found. Install it with:"
