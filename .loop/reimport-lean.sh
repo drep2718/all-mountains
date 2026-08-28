@@ -23,10 +23,25 @@ CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
   "$URL/rest/v1/routes?select=id&limit=1" \
   -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
 if [ "$CODE" != "200" ]; then
-  say "✗ database answered $CODE, not 200. Apply sql/lean-schema.sql first."
+  say "✗ database answered $CODE, not 200. Apply sql/rebuild-routes.sql first."
   exit 1
 fi
 say "✓ database is up"
+
+# Being up is not enough: the importer writes the lean shape, and against the
+# old shape PostgREST rejects every batch with "Could not find the 'bicycle'
+# column". That failure is quiet — each batch is skipped and the run continues
+# to completion having written nothing — so check the schema before spending
+# an hour fetching from Overpass.
+say "checking the schema is lean…"
+POLY=$(curl -s --max-time 20 "$URL/rest/v1/routes?select=poly&limit=1" \
+  -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+if echo "$POLY" | grep -q "42703\|does not exist"; then
+  say "✗ routes.poly is missing — the table still has the old shape."
+  say "  Run sql/rebuild-routes.sql in the SQL editor, then re-run this."
+  exit 1
+fi
+say "✓ schema is lean"
 
 # Relations first: the waymarked, named long-distance routes. Smallest and most
 # valuable, so a failure part-way still leaves the app with good data.
