@@ -109,12 +109,23 @@ let MIN_KM = 0.5;
  */
 const MAX_TILE_AREA = 12;
 
+/**
+ * Names that describe a road rather than a trail: numbered street grids
+ * ("229th Street", "310 Avenue") and agency road designations ("Forest Service
+ * Road 335", "County Road 12"). Matched case-insensitively against the name.
+ */
+const ROADLIKE_NAME =
+  /^(\d+(st|nd|rd|th)?\s+(street|st|avenue|ave|road|rd|drive|dr|lane|ln|place|pl)\b|(county|township|forest service|fs|state|us)\s+(road|rd|route|highway|hwy)\b)/i;
+
 function buildWay(w: OSMWay, country: string) {
   const geom = w.geometry;
   if (!geom || geom.length < 2) return null;
   const tags = w.tags || {};
   const name = tags.name || tags["name:en"] || null;
   if (!name) return null;
+  // Belt and braces behind the highway filter: a road occasionally carries a
+  // pedestrian tag, and "Forest Service Road 335" is not a hike.
+  if (ROADLIKE_NAME.test(name)) return null;
 
   const coords: number[][] = [];
   let minLat = 90, minLng = 180, maxLat = -90, maxLng = -180;
@@ -196,10 +207,21 @@ async function upsert(rows: Row[]): Promise<number> {
 async function doTile(
   cc: string, country: string, s: number, w: number, n: number, e: number, depth: number
 ): Promise<number> {
+  // Two corrections over the first version of this query:
+  //
+  // `area["ISO3166-1"]` — a bounding box is not a country. Canada's box reaches
+  // latitude 41.7, which is Nebraska, so 23,995 US trails were imported and
+  // labelled Canada. The relations importer always used an area filter; this
+  // one did not.
+  //
+  // path|footway only — `track` is farm and forestry roads. It is what brought
+  // in 8,271 rows named "Forest Service Road 335" and "229th Street", which are
+  // roads through South Dakota, not hiking trails.
   const q =
     `[out:json][timeout:180];` +
-    `way["highway"~"^(path|footway|track|bridleway)$"]["name"]` +
-    `["foot"!="no"](${s},${w},${n},${e});out geom;`;
+    `area["ISO3166-1"="${cc}"]->.a;` +
+    `way["highway"~"^(path|footway)$"]["name"]["foot"!="no"]` +
+    `(area.a)(${s},${w},${n},${e});out geom;`;
 
   const pad = "  ".repeat(depth + 1);
   const area = (n - s) * (e - w);
