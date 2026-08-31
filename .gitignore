@@ -47,3 +47,7 @@ brain/
 
 # Loop harness logs (keep the scripts, not the output)
 .loop/*.log
+
+# OSM extracts — large binaries, never commit
+*.osm.pbf
+trails.pbf
