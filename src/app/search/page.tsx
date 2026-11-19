@@ -131,7 +131,7 @@ function SearchResults() {
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {peaks.map((p) => (
-              <PeakCard key={p.id} peak={p} trailCount={p.trail_count} />
+              <PeakCard key={p.slug} peak={p} />
             ))}
           </div>
         </section>
@@ -140,7 +140,7 @@ function SearchResults() {
       {showTrails && routes.length > 0 && (
         <section className="mb-10">
           <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold text-ink">
-            <span>🥾</span> Trails
+            <span>🥾</span> Routes to those summits
             <span className="font-mono text-sm font-normal text-ink-faint">{routes.length}</span>
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

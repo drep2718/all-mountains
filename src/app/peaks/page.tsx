@@ -5,16 +5,18 @@ import { createClient } from "@/lib/supabase/client";
 import PeakCard from "@/components/PeakCard";
 import LocationSearch from "@/components/LocationSearch";
 import type { GeocodeResult } from "@/lib/geocode";
-import type { Peak, Difficulty } from "@/lib/types";
-import { getDifficulty } from "@/lib/types";
+import type { Peak, PeakDifficulty, PeakCategory } from "@/lib/peak-types";
+import { DIFFICULTY_LABEL } from "@/lib/peak-types";
 
-const difficulties: Difficulty[] = ["Easy", "Moderate", "Hard", "Expert", "Extreme"];
+// Difficulty is now a property of the climb, stated by the catalogue, not
+// derived from elevation — which used to call every 800 m scramble "Easy".
+const difficulties: PeakDifficulty[] = ["hike", "scramble", "technical"];
 
 export default function PeaksPage() {
   const [peaks, setPeaks] = useState<Peak[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [difficulty, setDifficulty] = useState<Difficulty | "All">("All");
+  const [difficulty, setDifficulty] = useState<PeakDifficulty | "All">("All");
   const [iconicOnly, setIconicOnly] = useState(false);
   const [sortBy, setSortBy] = useState<"popular" | "elevation" | "name">("popular");
   const [place, setPlace] = useState<GeocodeResult | null>(null);
@@ -32,7 +34,6 @@ export default function PeaksPage() {
       let query = supabase
         .from("peaks")
         .select("*")
-        .not("name", "is", null)
         .range(page * pageSize, (page + 1) * pageSize - 1);
 
       if (search) {
@@ -40,7 +41,13 @@ export default function PeaksPage() {
       }
 
       if (iconicOnly) {
-        query = query.eq("is_iconic", true);
+        query = query.eq("category", "highpoint" satisfies PeakCategory);
+      }
+
+      // Filter in the query, not after paging — filtering a page client-side
+      // silently returns fewer than pageSize results and looks like data loss.
+      if (difficulty !== "All") {
+        query = query.eq("difficulty", difficulty);
       }
 
       // Area filter: peaks whose coordinates fall inside the searched
@@ -55,27 +62,22 @@ export default function PeaksPage() {
       if (sortBy === "popular") {
         // Popularity proxy: curated iconic summits first, then the most
         // prominent, then the highest — the peaks people actually seek out.
+        // Popularity proxy: highpoints first, then the most prominent, then
+        // the ones with the most mapped routes.
         query = query
-          .order("is_iconic", { ascending: false, nullsFirst: false })
-          .order("prominence", { ascending: false, nullsFirst: false })
-          .order("elevation", { ascending: false, nullsFirst: false });
+          .order("category", { ascending: true })
+          .order("prominence_m", { ascending: false, nullsFirst: false })
+          .order("route_count", { ascending: false })
+          .order("elevation_m", { ascending: false });
       } else if (sortBy === "elevation") {
-        query = query.order("elevation", { ascending: false, nullsFirst: false });
+        query = query.order("elevation_m", { ascending: false });
       } else {
         query = query.order("name", { ascending: true, nullsFirst: false });
       }
 
       const { data, error } = await query;
 
-      if (!error && data) {
-        let filtered = data as Peak[];
-        if (difficulty !== "All") {
-          filtered = filtered.filter(
-            (p) => getDifficulty(p.elevation) === difficulty
-          );
-        }
-        setPeaks(filtered);
-      }
+      if (!error && data) setPeaks(data as Peak[]);
       setLoading(false);
     }
 
@@ -88,7 +90,7 @@ export default function PeaksPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-100">Browse Peaks</h1>
         <p className="mt-2 text-slate-400">
-          Explore mountains worldwide by name, elevation, or difficulty
+          Every summit in the catalogue — search by name, height or how hard it is
         </p>
       </div>
 
@@ -122,17 +124,17 @@ export default function PeaksPage() {
         </div>
 
         <div className="flex gap-1 rounded-xl border border-slate-700 bg-slate-900 p-1">
-          {["All", ...difficulties].map((d) => (
+          {(["All", ...difficulties] as const).map((d) => (
             <button
               key={d}
-              onClick={() => { setDifficulty(d as Difficulty | "All"); setPage(0); }}
+              onClick={() => { setDifficulty(d as PeakDifficulty | "All"); setPage(0); }}
               className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                 difficulty === d
                   ? "bg-alpine-600 text-white"
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >
-              {d}
+              {d === "All" ? "All" : DIFFICULTY_LABEL[d]}
             </button>
           ))}
         </div>
@@ -192,7 +194,7 @@ export default function PeaksPage() {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {peaks.map((peak) => (
-              <PeakCard key={peak.id} peak={peak} />
+              <PeakCard key={peak.slug} peak={peak} />
             ))}
           </div>
 

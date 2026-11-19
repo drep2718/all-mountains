@@ -1,75 +1,53 @@
 import { createClient } from "@/lib/supabase/client";
 import { geocode } from "@/lib/geocode";
-import type { Peak, Route } from "@/lib/types";
+import type { Peak, PeakRoute } from "@/lib/peak-types";
 
-// A peak search result carries how many trails reach its summit — the tie-in
-// that lets you go peak → trails from a single search.
-export interface PeakResult extends Peak {
-  trail_count: number;
-}
-
-// A route search result carries how many peaks it crosses (route → peaks).
-export type RouteResult = Route;
+/**
+ * Mountain-first search.
+ *
+ * Much smaller than it used to be. The old version carried a `route_peaks`
+ * join table, two tally passes and a bounding-box fallback for when the
+ * spatial linking job hadn't caught up — all of it to answer "how many trails
+ * reach this summit". A route now belongs to a peak and `peaks.route_count` is
+ * kept by a trigger, so the question answers itself.
+ */
 
 export interface SearchResults {
-  peaks: PeakResult[];
-  routes: RouteResult[];
-  // The mountain/place the query resolved to (via geocoding), if any — lets the
-  // UI say "everything around Mount Rainier".
-  place?: { name: string; center: [number, number] } | null;
+  peaks: Peak[];
+  routes: PeakRoute[];
+  /** The mountain or place the query resolved to, if any. */
+  place: { name: string; center: [number, number] } | null;
 }
-
-// Attach a count from a route_peaks link table keyed on the given column.
-function tally(
-  links: { peak_id?: number; route_id?: number }[],
-  key: "peak_id" | "route_id"
-): Map<number, number> {
-  const counts = new Map<number, number>();
-  for (const link of links) {
-    const id = link[key];
-    if (id == null) continue;
-    counts.set(id, (counts.get(id) ?? 0) + 1);
-  }
-  return counts;
-}
-
-// Lightweight peak-name lookup for the map/location search — just enough to
-// place a pin and fly to it. Ordered iconic-then-tallest so "Rainier" surfaces
-// the famous one first.
-/** Tolerance for "this trail reaches that summit", in degrees (~2 km). */
-const NEAR_DEG = 0.02;
 
 export interface PeakHit {
-  id: number;
-  name: string | null;
+  slug: string;
+  name: string;
   latitude: number;
   longitude: number;
-  elevation: number | null;
+  elevation_m: number;
 }
 
-export async function searchPeaksByName(query: string, limit = 4): Promise<PeakHit[]> {
+/** Lightweight name lookup for the map's search box. */
+export async function searchPeaksByName(query: string, limit = 6): Promise<PeakHit[]> {
   const q = query.trim();
   if (!q) return [];
-  const supabase = createClient();
-  const { data } = await supabase
+  const { data } = await createClient()
     .from("peaks")
-    .select("id,name,latitude,longitude,elevation")
+    .select("slug,name,latitude,longitude,elevation_m")
     .ilike("name", `%${q}%`)
-    .not("name", "is", null)          // never surface unnamed nodes
-    .order("is_iconic", { ascending: false, nullsFirst: false })
-    .order("prominence", { ascending: false, nullsFirst: false }) // real summits over sub-features
-    .order("elevation", { ascending: false, nullsFirst: false })
+    .order("category", { ascending: true }) // highpoint < popular < top_peak
+    .order("prominence_m", { ascending: false, nullsFirst: false })
+    .order("elevation_m", { ascending: false })
     .limit(limit);
-  return ((data ?? []) as unknown as PeakHit[]);
+  return (data ?? []) as PeakHit[];
 }
 
-// Unified, MOUNTAIN-FIRST search across peaks AND trails.
-//
-// Two things run in parallel: an exact name match (ilike) AND a geocode of the
-// query. Geocoding is what makes "Mount Rainier" (stored as "Columbia Crest"),
-// or even the typo "Mount Rainer", work: we resolve it to a location and then
-// pull EVERY peak and trail around that mountain via the bounds RPCs — so a
-// mountain search returns the peaks + trails you'd actually be doing there.
+/**
+ * Search peaks by name, and — because a mountain's name and its summit's name
+ * often differ ("Mount Rainier" vs "Columbia Crest"), and because people
+ * mistype — also geocode the query and return every peak around the place it
+ * resolves to.
+ */
 export async function searchAll(query: string, limit = 24): Promise<SearchResults> {
   const q = query.trim();
   if (!q) return { peaks: [], routes: [], place: null };
@@ -77,110 +55,90 @@ export async function searchAll(query: string, limit = 24): Promise<SearchResult
   const supabase = createClient();
   const like = `%${q}%`;
 
-  const [peaksRes, routesRes, places] = await Promise.all([
+  const [byName, places] = await Promise.all([
     supabase
       .from("peaks")
       .select("*")
       .ilike("name", like)
-      .order("is_iconic", { ascending: false, nullsFirst: false })
-      .order("elevation", { ascending: false, nullsFirst: false })
-      .limit(limit),
-    supabase
-      .from("routes")
-      .select("*")
-      .ilike("name", like)
-      .order("distance_km", { ascending: false, nullsFirst: false })
+      .order("category", { ascending: true })
+      .order("prominence_m", { ascending: false, nullsFirst: false })
+      .order("elevation_m", { ascending: false })
       .limit(limit),
     geocode(q),
   ]);
 
-  const peaks = ((peaksRes.data ?? []) as unknown as PeakResult[]).map((p) => ({
-    ...p,
-    trail_count: 0,
-  }));
-  const routes = ((routesRes.data ?? []) as unknown as RouteResult[]);
+  const peaks = (byName.data ?? []) as Peak[];
+  const seen = new Set(peaks.map((p) => p.slug));
 
-  // Resolve the query to a mountain. Geocoding can be ambiguous — "Mount
-  // Rainier" returns both a town in Maryland and the volcano in Washington. This
-  // is a mountains app, so we score each candidate by the tallest named peak
-  // near it and pick the most mountainous one.
+  // Geocoding is ambiguous — "Mount Rainier" returns both a town in Maryland
+  // and the volcano. This is a mountains app, so score each candidate by the
+  // tallest peak near it and take the most mountainous.
+  let place: SearchResults["place"] = null;
   const candidates = places.slice(0, 3).filter((c) => c.bbox);
-  let place: { name: string; center: [number, number] } | null = null;
 
   if (candidates.length) {
-    const peakSets = await Promise.all(
+    const sets = await Promise.all(
       candidates.map((c) => {
         const [minLng, minLat, maxLng, maxLat] = c.bbox!;
-        return supabase.rpc("peaks_in_bounds", {
-          min_lat: minLat, min_lng: minLng, max_lat: maxLat, max_lng: maxLng, min_elevation: 0, lim: 80,
-        });
+        return supabase
+          .from("peaks")
+          .select("*")
+          .gte("latitude", minLat)
+          .lte("latitude", maxLat)
+          .gte("longitude", minLng)
+          .lte("longitude", maxLng)
+          .order("elevation_m", { ascending: false })
+          .limit(60);
       })
     );
 
-    let bestIdx = 0, bestScore = -1;
-    peakSets.forEach((res, i) => {
-      const score = ((res.data ?? []) as unknown as PeakResult[])
-        .reduce((max, p) => (p.name ? Math.max(max, p.elevation ?? 0) : max), 0);
-      if (score > bestScore) { bestScore = score; bestIdx = i; }
+    let bestIdx = 0;
+    let bestScore = -1;
+    sets.forEach((res, i) => {
+      const score = ((res.data ?? []) as Peak[]).reduce(
+        (max, p) => Math.max(max, p.elevation_m),
+        0
+      );
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = i;
+      }
     });
 
     const chosen = candidates[bestIdx];
     place = { name: chosen.name, center: chosen.center };
 
-    const seenP = new Set(peaks.map((p) => p.id));
-    for (const p of ((peakSets[bestIdx].data ?? []) as unknown as PeakResult[])) {
-      if (!p.name || seenP.has(p.id)) continue; // named summits only — less noise
-      seenP.add(p.id);
-      peaks.push({ ...p, trail_count: 0 });
-    }
-
-    const [minLng, minLat, maxLng, maxLat] = chosen.bbox!;
-    const areaRoutes = await supabase.rpc("routes_in_bounds", {
-      min_lat: minLat, min_lng: minLng, max_lat: maxLat, max_lng: maxLng, lim: 40,
-    });
-    const seenR = new Set(routes.map((r) => r.id));
-    for (const r of ((areaRoutes.data ?? []) as unknown as RouteResult[])) {
-      if (seenR.has(r.id)) continue;
-      seenR.add(r.id);
-      routes.push(r);
+    for (const p of (sets[bestIdx].data ?? []) as Peak[]) {
+      if (seen.has(p.slug)) continue;
+      seen.add(p.slug);
+      peaks.push(p);
     }
   }
 
-  // Cross-link counts over the merged set (peak→trails, trail→peaks).
-  const [peakLinks, routeLinks] = await Promise.all([
-    peaks.length
-      ? supabase.from("route_peaks").select("peak_id").in("peak_id", peaks.map((p) => p.id))
-      : Promise.resolve({ data: [] }),
-    routes.length
-      ? supabase.from("route_peaks").select("route_id").in("route_id", routes.map((r) => r.id))
-      : Promise.resolve({ data: [] }),
-  ]);
-
-  const trailCounts = tally((peakLinks.data ?? []) as { peak_id: number }[], "peak_id");
-  const peakCounts = tally((routeLinks.data ?? []) as { route_id: number }[], "route_id");
-
-  for (const p of peaks) p.trail_count = trailCounts.get(p.id) ?? 0;
-  for (const r of routes) r.peak_count = peakCounts.get(r.id) ?? 0;
-
-  // route_peaks is filled by a batch spatial job, so trails imported since it
-  // last ran are missing from it and every peak would read "no mapped trails".
-  // Both sets are already in memory here, so fall back to a bounding-box test.
-  for (const p of peaks) {
-    if (p.trail_count > 0) continue;
-    p.trail_count = routes.filter(
-      (r) =>
-        r.bbox_min_lat != null &&
-        p.latitude >= r.bbox_min_lat - NEAR_DEG &&
-        p.latitude <= r.bbox_max_lat + NEAR_DEG &&
-        p.longitude >= r.bbox_min_lng - NEAR_DEG &&
-        p.longitude <= r.bbox_max_lng + NEAR_DEG
-    ).length;
+  // Routes for whatever peaks we found. One query, no join table.
+  let routes: PeakRoute[] = [];
+  if (peaks.length) {
+    const { data } = await supabase
+      .from("routes")
+      .select("*")
+      .in(
+        "peak_slug",
+        peaks.slice(0, 40).map((p) => p.slug)
+      )
+      .order("is_summit_route", { ascending: false })
+      .order("distance_to_summit_m")
+      .limit(limit * 2);
+    routes = (data ?? []) as PeakRoute[];
   }
 
-  // Highest / most iconic first so the marquee summit leads.
-  peaks.sort((a, b) =>
-    Number(b.is_iconic ?? false) - Number(a.is_iconic ?? false) ||
-    (b.elevation ?? 0) - (a.elevation ?? 0));
+  // Highpoints first, then the most prominent — the marquee summit leads.
+  const rank: Record<string, number> = { highpoint: 0, top_peak: 1, popular: 2 };
+  peaks.sort(
+    (a, b) =>
+      (rank[a.category] ?? 3) - (rank[b.category] ?? 3) ||
+      (b.prominence_m ?? 0) - (a.prominence_m ?? 0) ||
+      b.elevation_m - a.elevation_m
+  );
 
-  return { peaks, routes, place: place ? { name: place.name, center: place.center } : null };
+  return { peaks, routes, place };
 }

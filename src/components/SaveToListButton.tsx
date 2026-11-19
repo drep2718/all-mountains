@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import type { ListItemType } from "@/lib/types";
 import {
   fetchMyLists,
   fetchListsContaining,
@@ -14,11 +13,9 @@ import {
 } from "@/lib/lists";
 
 export default function SaveToListButton({
-  itemType,
-  itemId,
+  peakSlug,
 }: {
-  itemType: ListItemType;
-  itemId: number;
+  peakSlug: string;
 }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -29,7 +26,7 @@ export default function SaveToListButton({
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => setSignedIn(!!user));
+    supabase.auth.getUser().then(({ data: { user } }) => setSignedIn(!!user)).catch(() => setSignedIn(false));
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_e, session) => setSignedIn(!!session?.user)
     );
@@ -48,8 +45,8 @@ export default function SaveToListButton({
 
   const lists = useQuery({ queryKey: ["my-lists"], queryFn: fetchMyLists, enabled: open });
   const containing = useQuery({
-    queryKey: ["lists-containing", itemType, itemId],
-    queryFn: () => fetchListsContaining(itemType, itemId),
+    queryKey: ["lists-containing", peakSlug],
+    queryFn: () => fetchListsContaining(peakSlug),
     enabled: open,
   });
   const inLists = new Set(containing.data ?? []);
@@ -57,12 +54,12 @@ export default function SaveToListButton({
 
   const toggle = useMutation({
     mutationFn: async (listId: number) => {
-      if (inLists.has(listId)) await removeItem(listId, itemType, itemId);
-      else await addItem(listId, itemType, itemId);
+      if (inLists.has(listId)) await removeItem(listId, peakSlug);
+      else await addItem(listId, peakSlug);
     },
     onSuccess: () => {
       setErr(null);
-      qc.invalidateQueries({ queryKey: ["lists-containing", itemType, itemId] });
+      qc.invalidateQueries({ queryKey: ["lists-containing", peakSlug] });
       qc.invalidateQueries({ queryKey: ["my-lists"] });
     },
     onError: (e: unknown) => setErr(e instanceof Error ? e.message : "Couldn't update the list."),
@@ -71,13 +68,13 @@ export default function SaveToListButton({
   const create = useMutation({
     mutationFn: async () => {
       const list = await createList(newName.trim());
-      await addItem(list.id, itemType, itemId);
+      await addItem(list.id, peakSlug);
     },
     onSuccess: () => {
       setNewName("");
       setErr(null);
       qc.invalidateQueries({ queryKey: ["my-lists"] });
-      qc.invalidateQueries({ queryKey: ["lists-containing", itemType, itemId] });
+      qc.invalidateQueries({ queryKey: ["lists-containing", peakSlug] });
     },
     onError: (e: unknown) => setErr(e instanceof Error ? e.message : "Couldn't create the list."),
   });

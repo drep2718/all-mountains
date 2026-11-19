@@ -41,7 +41,7 @@ export default function LocationSearch({ onSelect, selected, placeholder = "Sear
         .slice(0, 4)
         .map((p) => ({
           kind: "peak",
-          elevation: p.elevation,
+          elevation: p.elevation_m,
           place: {
             name: p.name as string,
             center: [p.longitude, p.latitude],

@@ -6,7 +6,7 @@
  *   data   — trail/peak JSON captured as you browse
  */
 
-const VERSION = "v3";
+const VERSION = "v4";
 const SHELL = `am-shell-${VERSION}`;
 const DATA = `am-data-${VERSION}`;
 
@@ -17,7 +17,12 @@ const DATA = `am-data-${VERSION}`;
 // Keep in sync with TILE_CACHE in src/lib/offline.ts.
 const TILES = "am-tiles";
 
-const KEEP = [SHELL, TILES, DATA];
+// Downloaded photographs. Unversioned for the same reason as TILES: they are
+// the user's data, and a service-worker update must never delete them.
+// Keep in sync with IMAGE_CACHE in src/lib/offline.ts.
+const IMAGES = "am-images";
+
+const KEEP = [SHELL, TILES, IMAGES, DATA];
 
 // Kept small on purpose: precaching a hashed Next.js build from a static list
 // goes stale instantly. The shell fills in at runtime instead.
@@ -50,6 +55,11 @@ const isMapboxAsset = (url) =>
   url.hostname.endsWith("mapbox.com") || url.hostname.endsWith("mapbox.cn");
 
 const isSupabase = (url) => url.pathname.startsWith("/rest/v1/");
+
+// Wikimedia photographs saved by a mountain download.
+const isCommonsImage = (url) =>
+  (url.hostname.endsWith("wikimedia.org") || url.hostname.endsWith("wikipedia.org")) &&
+  /\.(jpe?g|png|webp|svg)$/i.test(url.pathname);
 
 /**
  * Next.js client-side navigation fetches the same path with an `_rsc` query and
@@ -154,6 +164,13 @@ self.addEventListener("fetch", (event) => {
   // Map imagery — always cache-first so a downloaded trail works with no signal.
   if (isTile(url) || isMapboxAsset(url)) {
     event.respondWith(cacheFirst(request, TILES));
+    return;
+  }
+
+  // Downloaded photographs — cache-first, so a summit still looks like a
+  // mountain when there is no signal.
+  if (isCommonsImage(url)) {
+    event.respondWith(cacheFirst(request, IMAGES));
     return;
   }
 

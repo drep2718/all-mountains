@@ -4,8 +4,8 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchList, fetchListItems, removeItem } from "@/lib/lists";
-import type { ListItem } from "@/lib/types";
-import { getDifficulty, getDifficultyColor, DIFFICULTY_HEX, formatDuration, type Difficulty } from "@/lib/types";
+import type { ListItem } from "@/lib/lists";
+import { DIFFICULTY_HEX, DIFFICULTY_LABEL, difficultyClasses } from "@/lib/peak-types";
 
 export default function ListDetailPage() {
   const { id } = useParams();
@@ -17,8 +17,7 @@ export default function ListDetailPage() {
   const items = useQuery({ queryKey: ["list-items", listId], queryFn: () => fetchListItems(listId) });
 
   const remove = useMutation({
-    mutationFn: (it: ListItem) =>
-      removeItem(listId, it.peak_id ? "peak" : "route", (it.peak_id ?? it.route_id)!),
+    mutationFn: (it: ListItem) => removeItem(listId, it.peak_slug),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["list-items", listId] });
       qc.invalidateQueries({ queryKey: ["my-lists"] });
@@ -46,36 +45,41 @@ export default function ListDetailPage() {
 
       {rows.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-ink-faint">
-          Empty list. Add peaks or trails with “Save to list”.
+          Empty list. Add mountains with “Save to list”.
         </div>
       ) : (
         <ul className="divide-y divide-border rounded-2xl border border-border bg-surface">
           {rows.map((it) => {
-            const isPeak = !!it.peak_id;
             const p = it.peak;
-            const r = it.route;
-            const diff: Difficulty | null = isPeak
-              ? p ? getDifficulty(p.elevation) : null
-              : (r?.difficulty as Difficulty) || null;
-            const href = isPeak ? `/peaks/${it.peak_id}` : `/routes/${it.route_id}`;
-            const name = isPeak ? (p?.name || "Unnamed peak") : (r?.name || "Unnamed trail");
+            const diff = p?.difficulty ?? null;
             return (
               <li key={it.id} className="flex items-center gap-3 px-4 py-3">
                 <span
                   className="h-9 w-1.5 flex-none rounded-full"
                   style={{ background: diff ? DIFFICULTY_HEX[diff] : "#8a8a80" }}
                 />
-                <Link href={href} className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-ink">{name}</div>
+                <Link href={`/peaks/${it.peak_slug}`} className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-ink">
+                    {p?.name ?? it.peak_slug}
+                  </div>
                   <div className="mt-0.5 text-xs text-ink-muted">
-                    {isPeak
-                      ? `⛰ Peak${p?.elevation ? ` · ${p.elevation.toLocaleString()} m` : ""}`
-                      : `🥾 Trail${r?.distance_km != null ? ` · ${r.distance_km.toFixed(1)} km` : ""}${r?.est_time_min ? ` · ${formatDuration(r.est_time_min)}` : ""}`}
+                    {p
+                      ? [
+                          `${p.elevation_m.toLocaleString()} m`,
+                          p.range_name,
+                          p.country,
+                          p.route_count ? `${p.route_count} route${p.route_count === 1 ? "" : "s"}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      : "—"}
                   </div>
                 </Link>
                 {diff && (
-                  <span className={`flex-none rounded-full px-2.5 py-1 text-xs font-medium ${getDifficultyColor(diff)}`}>
-                    {diff}
+                  <span
+                    className={`flex-none rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${difficultyClasses(diff)}`}
+                  >
+                    {DIFFICULTY_LABEL[diff]}
                   </span>
                 )}
                 <button

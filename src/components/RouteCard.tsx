@@ -1,8 +1,15 @@
 import Link from "next/link";
-import { type Route, formatDuration } from "@/lib/types";
+import { type PeakRoute as Route, formatDuration } from "@/lib/peak-types";
 import { routeStaticMapUrl } from "@/lib/staticMap";
 
-export default function RouteCard({ route }: { route: Route }) {
+export default function RouteCard({
+  route,
+  peakName,
+}: {
+  route: Route;
+  /** The summit this route serves — a route has exactly one now. */
+  peakName?: string;
+}) {
   const mapUrl = routeStaticMapUrl(route, 640, 360);
 
   return (
@@ -40,8 +47,8 @@ export default function RouteCard({ route }: { route: Route }) {
         <h3 className="truncate font-display text-lg font-bold text-ink">
           {route.name || "Unnamed Route"}
         </h3>
-        <div className="mt-0.5 text-sm text-ink-muted">
-          {route.region ? `${route.region}, ` : ""}{route.country}
+        <div className="mt-0.5 truncate text-sm text-ink-muted">
+          {peakName ? `to ${peakName}` : route.ref ? `Route ${route.ref}` : ""}
         </div>
 
         {/* Stat row — AllTrails style */}
@@ -61,10 +68,10 @@ export default function RouteCard({ route }: { route: Route }) {
               <span className="text-ink-faint">▲</span> {route.ascent_m.toLocaleString()} m
             </span>
           )}
-          {route.peak_count ? (
-            <span className="text-pine-600">
-              {route.peak_count} peak{route.peak_count === 1 ? "" : "s"}
-            </span>
+          {route.is_summit_route ? (
+            <span className="text-pine-600">reaches the summit</span>
+          ) : route.distance_to_summit_m != null ? (
+            <span className="text-ink-faint">{route.distance_to_summit_m} m short</span>
           ) : null}
         </div>
       </div>

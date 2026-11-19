@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import RouteCard from "@/components/RouteCard";
 import FilterSheet from "@/components/FilterSheet";
 import LocationSearch from "@/components/LocationSearch";
-import type { Route } from "@/lib/types";
+import type { PeakRoute as Route } from "@/lib/peak-types";
 import { type Filters, DEFAULT_FILTERS, applyRouteFilters, activeFilterCount } from "@/lib/filters";
 import type { GeocodeResult } from "@/lib/geocode";
 

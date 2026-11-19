@@ -16,7 +16,7 @@ export default function ListsPage() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => setSignedIn(!!user));
+    supabase.auth.getUser().then(({ data: { user } }) => setSignedIn(!!user)).catch(() => setSignedIn(false));
     // React to the session hydrating/refreshing so a signed-in user is never
     // shown the signed-out state due to a first-paint timing race.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(

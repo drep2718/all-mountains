@@ -6,11 +6,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import StarRating from "./StarRating";
 import {
-  CONDITION_OPTIONS, deleteReview, fetchMyReview, fetchRating, fetchReviews,
-  saveReview, type Subject,
+  CONDITION_OPTIONS,
+  deleteReview,
+  fetchMyReview,
+  fetchRating,
+  fetchReviews,
+  saveReview,
 } from "@/lib/reviews";
 
-export default function Reviews({ subject, id }: { subject: Subject; id: number }) {
+export default function Reviews({ peakSlug }: { peakSlug: string }) {
   const qc = useQueryClient();
   const [signedIn, setSignedIn] = useState(false);
   const [open, setOpen] = useState(false);
@@ -21,19 +25,19 @@ export default function Reviews({ subject, id }: { subject: Subject; id: number 
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => setSignedIn(!!user));
+    supabase.auth.getUser().then(({ data: { user } }) => setSignedIn(!!user)).catch(() => setSignedIn(false));
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_e, s) => setSignedIn(!!s?.user)
     );
     return () => subscription.unsubscribe();
   }, []);
 
-  const key = [subject, id] as const;
-  const summary = useQuery({ queryKey: ["rating", ...key], queryFn: () => fetchRating(subject, id) });
-  const list = useQuery({ queryKey: ["reviews", ...key], queryFn: () => fetchReviews(subject, id) });
+  const key = ["peak", peakSlug] as const;
+  const summary = useQuery({ queryKey: ["rating", ...key], queryFn: () => fetchRating(peakSlug) });
+  const list = useQuery({ queryKey: ["reviews", ...key], queryFn: () => fetchReviews(peakSlug) });
   const mine = useQuery({
     queryKey: ["my-review", ...key],
-    queryFn: () => fetchMyReview(subject, id),
+    queryFn: () => fetchMyReview(peakSlug),
     enabled: signedIn,
   });
 
@@ -55,7 +59,7 @@ export default function Reviews({ subject, id }: { subject: Subject; id: number 
 
   const save = useMutation({
     mutationFn: () =>
-      saveReview(subject, id, { rating, body, conditions, hikedOn: null }),
+      saveReview(peakSlug, { rating, body, conditions, hikedOn: null }),
     onSuccess: () => { setOpen(false); invalidate(); },
     onError: (e: unknown) =>
       setError(e instanceof Error ? e.message : "Couldn't save your review."),

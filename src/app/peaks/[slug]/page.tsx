@@ -1,125 +1,205 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import type { Peak, SummitLog } from "@/lib/types";
-import { getDifficulty, getDifficultyColor } from "@/lib/types";
-import { peakImageUrl, hasRealPhoto } from "@/lib/peakImage";
-import { reverseGeocode, type PlaceContext } from "@/lib/geocode";
-import TrailsForPeak from "@/components/TrailsForPeak";
-import SaveToListButton from "@/components/SaveToListButton";
+import {
+  CATEGORY_LABEL,
+  DIFFICULTY_LABEL,
+  accessInfo,
+  difficultyClasses,
+  formatDistance,
+  formatDuration,
+  formatElevation,
+  noRoutesMessage,
+  type Peak,
+  type PeakPhoto,
+  type PeakRoute,
+  type SummitLog,
+} from "@/lib/peak-types";
+import { getPeakDownload } from "@/lib/offline";
+import PeakGallery from "@/components/PeakGallery";
+import PeakWeather from "@/components/PeakWeather";
+import DownloadPeakButton from "@/components/DownloadPeakButton";
+import LogSummitPanel from "@/components/LogSummitPanel";
 import Reviews from "@/components/Reviews";
 
-export default function PeakDetailPage() {
-  const { id } = useParams();
+interface Bundle {
+  peak: Peak;
+  photos: PeakPhoto[];
+  routes: PeakRoute[];
+}
+
+export default function PeakPage() {
+  const { slug } = useParams<{ slug: string }>();
   const router = useRouter();
-  const [peak, setPeak] = useState<Peak | null>(null);
-  const [place, setPlace] = useState<PlaceContext | null>(null);
+  const supabase = useMemo(() => createClient(), []);
+
+  const [data, setData] = useState<Bundle | null>(null);
+  const [nearby, setNearby] = useState<Peak[]>([]);
   const [logs, setLogs] = useState<SummitLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showLogForm, setShowLogForm] = useState(false);
-  const [user, setUser] = useState<string | null>(null);
-  const supabase = createClient();
+  const [state, setState] = useState<"loading" | "ready" | "missing">("loading");
+  const [rank, setRank] = useState<{ place: number; of: number } | null>(null);
+  const [fromCache, setFromCache] = useState(false);
 
-  // Form state
-  const [logDate, setLogDate] = useState(new Date().toISOString().split("T")[0]);
-  const [logDuration, setLogDuration] = useState("");
-  const [logNotes, setLogNotes] = useState("");
-  const [logRating, setLogRating] = useState(0);
-  const [logWeather, setLogWeather] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
+  // Offline bundle first, network second. If this inverts, the one screen that
+  // has to work on a mountain stops working on a mountain.
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => setUser(user?.id ?? null));
-  }, []);
+    let cancelled = false;
 
-  useEffect(() => {
-    async function fetch() {
-      // Query the peak by ID — direct table query via Supabase client
-      const { data: peakData } = await supabase
-        .from("peaks")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (peakData) {
-        const p = peakData as Peak;
-        setPeak(p);
-        // Resolve state / nearest town from coordinates (on-demand, cached by browser)
-        reverseGeocode(p.latitude, p.longitude).then(setPlace).catch(() => {});
+    (async () => {
+      const cached = getPeakDownload(slug);
+      const payload = cached?.payload as Bundle | undefined;
+      if (payload?.peak) {
+        if (!cancelled) {
+          setData(payload);
+          setState("ready");
+          setFromCache(true);
+        }
       }
 
-      // Get summit logs for this peak
-      const { data: logData } = await supabase
-        .from("summit_logs")
-        .select("*")
-        .eq("peak_id", id)
-        .eq("is_public", true)
-        .order("summited_at", { ascending: false });
+      try {
+        const { data: peak, error } = await supabase
+          .from("peaks")
+          .select("*")
+          .eq("slug", slug)
+          .single();
+        if (error || !peak) throw error ?? new Error("not found");
 
-      if (logData) setLogs(logData as SummitLog[]);
-      setLoading(false);
-    }
-    fetch();
-  }, [id]);
+        const [{ data: photos }, { data: routes }] = await Promise.all([
+          supabase.from("peak_photos").select("*").eq("peak_slug", slug).order("sort_order"),
+          supabase
+            .from("routes")
+            .select("*")
+            .eq("peak_slug", slug)
+            .order("is_summit_route", { ascending: false })
+            .order("distance_to_summit_m"),
+        ]);
 
-  const handleSubmitLog = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !peak) return;
-    setSubmitting(true);
+        if (cancelled) return;
+        setData({
+          peak: peak as Peak,
+          photos: (photos ?? []) as PeakPhoto[],
+          routes: (routes ?? []) as PeakRoute[],
+        });
+        setState("ready");
+        setFromCache(false);
+      } catch {
+        // A rejected query offline must not leave the page spinning forever —
+        // that bug shipped once already.
+        if (!cancelled && !payload) setState("missing");
+      }
+    })();
 
-    // Insert a new summit log — this goes through RLS which checks auth.uid() = user_id
-    const { error } = await supabase.from("summit_logs").insert({
-      user_id: user,
-      peak_id: peak.id,
-      summited_at: logDate,
-      duration_minutes: logDuration ? parseInt(logDuration) : null,
-      notes: logNotes || null,
-      rating: logRating || null,
-      weather: logWeather || null,
-    });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, supabase]);
 
-    if (!error) {
-      setShowLogForm(false);
-      // Refresh logs
-      const { data } = await supabase
-        .from("summit_logs")
-        .select("*")
-        .eq("peak_id", peak.id)
-        .eq("is_public", true)
-        .order("summited_at", { ascending: false });
-      if (data) setLogs(data as SummitLog[]);
-    }
-    setSubmitting(false);
-  };
+  // Secondary data: never blocks the page, never needed offline.
+  useEffect(() => {
+    if (!data?.peak || fromCache) return;
+    const p = data.peak;
+    const dLat = 0.65;
+    const dLng = dLat / Math.max(Math.cos((p.latitude * Math.PI) / 180), 0.1);
 
-  if (loading) {
+    // Secondary data. Wrapped so a failure can never block the page or leak
+    // an unhandled rejection; both lists simply stay empty.
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("peaks")
+          .select("slug,name,elevation_m,latitude,longitude,country,difficulty,category,hero_photo_url")
+          .gte("latitude", p.latitude - dLat)
+          .lte("latitude", p.latitude + dLat)
+          .gte("longitude", p.longitude - dLng)
+          .lte("longitude", p.longitude + dLng)
+          .neq("slug", p.slug)
+          .order("elevation_m", { ascending: false })
+          .limit(6);
+        setNearby((data ?? []) as Peak[]);
+      } catch {
+        setNearby([]);
+      }
+    })();
+
+    // Rank within its country, counted from our own catalogue. Replaces the
+    // "isolation" figure from Wikidata, whose units are unreliable per-record
+    // (Denali is recorded as 7.4 km isolated; the real figure is 7,450 km —
+    // the magnitude is right but the claim is tagged metres, not kilometres).
+    (async () => {
+      try {
+        const [higher, total] = await Promise.all([
+          supabase
+            .from("peaks")
+            .select("slug", { count: "exact", head: true })
+            .eq("country", p.country)
+            .gt("elevation_m", p.elevation_m),
+          supabase
+            .from("peaks")
+            .select("slug", { count: "exact", head: true })
+            .eq("country", p.country),
+        ]);
+        if (higher.count != null && total.count != null) {
+          setRank({ place: higher.count + 1, of: total.count });
+        }
+      } catch {
+        setRank(null);
+      }
+    })();
+
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("summit_logs")
+          .select("*")
+          .eq("peak_slug", p.slug)
+          .eq("is_public", true)
+          .order("summited_at", { ascending: false })
+          .limit(10);
+        setLogs((data ?? []) as SummitLog[]);
+      } catch {
+        setLogs([]);
+      }
+    })();
+  }, [data?.peak, fromCache, supabase]);
+
+  if (state === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-700 border-t-alpine-500" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-pine-600" />
       </div>
     );
   }
 
-  if (!peak) {
+  if (state === "missing" || !data) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-slate-400">
-        Peak not found.
+      <div className="mx-auto max-w-xl px-4 py-24 text-center">
+        <p className="text-5xl">⛰</p>
+        <h1 className="mt-4 font-display text-xl font-bold text-ink">Peak not found</h1>
+        <p className="mt-2 text-sm text-ink-muted">
+          It may not be in the catalogue, or you may be offline and it isn&apos;t downloaded.
+        </p>
+        <Link
+          href="/downloads"
+          className="mt-6 inline-block rounded-lg border border-border px-4 py-2 text-sm text-ink-muted hover:bg-ground/40"
+        >
+          See your downloads
+        </Link>
       </div>
     );
   }
 
-  const difficulty = getDifficulty(peak.elevation);
-  const diffColor = getDifficultyColor(difficulty);
+  const { peak, photos, routes } = data;
+  const summitRoutes = routes.filter((r) => r.is_summit_route);
+  const approachRoutes = routes.filter((r) => !r.is_summit_route);
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
-      {/* Back */}
+    <div className="mx-auto max-w-4xl px-4 py-6 pb-24">
       <button
         onClick={() => router.back()}
-        className="mb-6 flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-slate-200"
+        className="mb-4 flex items-center gap-2 text-sm text-ink-muted transition-colors hover:text-ink"
       >
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
@@ -127,254 +207,218 @@ export default function PeakDetailPage() {
         Back
       </button>
 
-      {/* Hero */}
-      <div className="relative mb-8 overflow-hidden rounded-2xl">
-        {peakImageUrl(peak, 1200, 600) ? (
-          <img
-            src={peakImageUrl(peak, 1200, 600)!}
-            alt={peak.name || "Peak"}
-            className="h-72 w-full object-cover sm:h-96"
-          />
-        ) : (
-          <div className="flex h-72 items-center justify-center bg-gradient-to-br from-slate-800 to-slate-700 sm:h-96">
-            <span className="text-8xl opacity-20">⛰</span>
-          </div>
-        )}
-        {!hasRealPhoto(peak) && (
-          <span className="absolute right-3 top-3 rounded-full bg-ground/80 px-2.5 py-1 text-xs text-ink-muted backdrop-blur">
-            🛰 Satellite view
+      {fromCache && (
+        <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+          Showing your downloaded copy.
+        </p>
+      )}
+
+      <PeakGallery peak={peak} photos={photos} />
+
+      {/* Title */}
+      <div className="mt-5">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <span
+            className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${difficultyClasses(peak.difficulty)}`}
+          >
+            {DIFFICULTY_LABEL[peak.difficulty]}
           </span>
-        )}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-surface via-surface/85 to-transparent p-6 pt-20">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${diffColor}`}>
-              {difficulty}
+          {peak.category === "highpoint" && (
+            <span className="rounded-full bg-[#e8b33a] px-2.5 py-1 text-xs font-bold text-[#3d2c00]">
+              🥇 {peak.region ? `${peak.region} highpoint` : "Highpoint"}
             </span>
-            {peak.is_iconic && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-[#e8b33a] px-3 py-1 text-xs font-bold text-[#3d2c00]">
-                🥇 Iconic Summit
-              </span>
-            )}
-          </div>
-          <h1 className="font-display text-3xl font-bold text-ink sm:text-4xl">
-            {peak.name || "Unnamed Peak"}
-          </h1>
-          <p className="mt-1 text-ink-muted">
-            {[place?.place, place?.region, place?.country ?? peak.country]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
+          )}
+          {peak.category === "top_peak" && (
+            <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-medium text-violet-900 ring-1 ring-violet-300">
+              {CATEGORY_LABEL.top_peak}
+            </span>
+          )}
         </div>
+        <h1 className="font-display text-3xl font-bold text-ink sm:text-4xl">{peak.name}</h1>
+        <p className="mt-1 text-ink-muted">
+          {[peak.range_name, peak.region, peak.country].filter(Boolean).join(" · ")}
+        </p>
       </div>
 
-      {/* Stats grid */}
-      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      {/* Stats */}
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Elevation", value: peak.elevation ? `${peak.elevation.toLocaleString()} m` : "—" },
-          { label: "Prominence", value: peak.prominence ? `${peak.prominence.toLocaleString()} m` : "—" },
-          { label: "Elevation (ft)", value: peak.elevation ? `${Math.round(peak.elevation * 3.281).toLocaleString()} ft` : "—" },
-          { label: "Difficulty", value: difficulty },
-          { label: "State / Region", value: place?.region ?? "—" },
-          { label: "Nearest town", value: place?.place ?? "—" },
-          { label: "Coordinates", value: `${peak.latitude.toFixed(4)}, ${peak.longitude.toFixed(4)}` },
-          { label: "Country", value: place?.country ?? peak.country ?? "—" },
-        ].map((stat) => (
-          <div key={stat.label} className="rounded-xl border border-border bg-surface p-4">
-            <div className="text-xs text-ink-faint">{stat.label}</div>
-            <div className="mt-1 font-mono text-sm font-semibold text-ink">{stat.value}</div>
+          { label: "Elevation", value: `${peak.elevation_m.toLocaleString()} m` },
+          { label: "In feet", value: `${Math.round(peak.elevation_m * 3.28084).toLocaleString()} ft` },
+          {
+            label: "Prominence",
+            value: peak.prominence_m ? `${peak.prominence_m.toLocaleString()} m` : "—",
+          },
+          {
+            label: `Rank in ${peak.country.length > 12 ? "country" : peak.country}`,
+            value: rank ? `#${rank.place} of ${rank.of}` : "—",
+          },
+          { label: "Range", value: peak.range_name ?? "—" },
+          { label: "Routes", value: routes.length ? String(routes.length) : "—" },
+          { label: "Summited by", value: peak.summit_count ? String(peak.summit_count) : "—" },
+          {
+            label: "Coordinates",
+            value: `${peak.latitude.toFixed(3)}, ${peak.longitude.toFixed(3)}`,
+          },
+        ].map((s) => (
+          <div key={s.label} className="rounded-xl border border-border bg-surface p-3">
+            <div className="text-[11px] text-ink-faint">{s.label}</div>
+            <div className="mt-0.5 truncate font-mono text-sm font-semibold text-ink" title={s.value}>
+              {s.value}
+            </div>
           </div>
         ))}
       </div>
 
-      {/* View on the live map */}
-      <Link
-        href={`/explore?peak=${peak.id}`}
-        className="mb-6 flex items-center justify-center gap-2 rounded-2xl border border-pine-600 bg-pine-600/10 py-3 text-sm font-semibold text-pine-700 transition-colors hover:bg-pine-600/20"
-      >
-        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
-        </svg>
-        View on map
-      </Link>
-
-      {/* Save to a list */}
-      <div className="mb-6">
-        <SaveToListButton itemType="peak" itemId={peak.id} />
+      <div className="mt-4 space-y-4">
+        <DownloadPeakButton peak={peak} routes={routes} photos={photos} />
+        <LogSummitPanel peak={peak} routes={routes} />
       </div>
 
-      {/* Trails that summit this peak (sortable by commonality / difficulty) */}
-      <TrailsForPeak peakId={peak.id} />
-
-      {/* Ratings, conditions, and written reviews */}
-      <div className="mt-4">
-        <Reviews subject="peak" id={peak.id} />
-      </div>
-
-      {/* About (Wikipedia description) */}
-      {peak.description && (
-        <div className="mb-6 rounded-2xl border border-border bg-surface p-5">
-          <h2 className="mb-2 font-display text-lg font-bold text-ink">About {peak.name}</h2>
-          <p className="text-sm leading-relaxed text-ink-muted">{peak.description}</p>
-        </div>
-      )}
-
-      {/* Wikipedia link */}
-      {peak.wikipedia_url && (
-        <a
-          href={peak.wikipedia_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mb-8 flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 p-4 text-sm text-summit-600 transition-colors hover:border-slate-700"
-        >
-          <span>📖</span>
-          Read more on Wikipedia →
-        </a>
-      )}
-
-      {/* Log a summit */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-slate-100">Summit Logs</h2>
-          {user ? (
-            <button
-              onClick={() => setShowLogForm(!showLogForm)}
-              className="rounded-lg bg-alpine-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-alpine-500"
-            >
-              {showLogForm ? "Cancel" : "+ Log Summit"}
-            </button>
-          ) : (
-            <Link
-              href="/login"
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800"
-            >
-              Sign in to log
-            </Link>
+      {/* Routes */}
+      <section className="mt-6">
+        <h2 className="mb-3 font-display text-lg font-bold text-ink">
+          Routes to the summit
+          {routes.length > 0 && (
+            <span className="ml-2 text-sm font-normal text-ink-faint">{routes.length}</span>
           )}
-        </div>
+        </h2>
 
-        {showLogForm && (
-          <form
-            onSubmit={handleSubmitLog}
-            className="mt-4 rounded-xl border border-slate-800 bg-slate-900 p-6"
-          >
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-sm text-slate-300">Date</label>
-                <input
-                  type="date"
-                  value={logDate}
-                  onChange={(e) => setLogDate(e.target.value)}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-alpine-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm text-slate-300">Duration (minutes)</label>
-                <input
-                  type="number"
-                  value={logDuration}
-                  onChange={(e) => setLogDuration(e.target.value)}
-                  placeholder="180"
-                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-alpine-500"
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm text-slate-300">Weather</label>
-                <select
-                  value={logWeather}
-                  onChange={(e) => setLogWeather(e.target.value)}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none"
-                >
-                  <option value="">Select...</option>
-                  <option value="sunny">☀️ Sunny</option>
-                  <option value="cloudy">☁️ Cloudy</option>
-                  <option value="rainy">🌧️ Rainy</option>
-                  <option value="snowy">🌨️ Snowy</option>
-                  <option value="windy">💨 Windy</option>
-                  <option value="foggy">🌫️ Foggy</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm text-slate-300">Rating</label>
-                <div className="flex gap-1 pt-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => setLogRating(star)}
-                      className={`text-2xl transition-colors ${
-                        star <= logRating ? "text-peak-500" : "text-slate-700"
-                      }`}
-                    >
-                      ★
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="mt-4">
-              <label className="mb-1.5 block text-sm text-slate-300">Notes</label>
-              <textarea
-                value={logNotes}
-                onChange={(e) => setLogNotes(e.target.value)}
-                rows={3}
-                placeholder="How was the climb?"
-                className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-alpine-500"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="mt-4 rounded-lg bg-alpine-600 px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-alpine-500 disabled:opacity-50"
-            >
-              {submitting ? "Saving..." : "Save Summit Log"}
-            </button>
-          </form>
+        {routes.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-ink-muted">
+            {noRoutesMessage(peak)}
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {[...summitRoutes, ...approachRoutes].map((r) => (
+              <RouteRow key={r.id} route={r} peakSlug={peak.slug} />
+            ))}
+          </div>
         )}
+      </section>
+
+      <div className="mt-6">
+        <PeakWeather
+          latitude={peak.latitude}
+          longitude={peak.longitude}
+          elevationM={peak.elevation_m}
+        />
       </div>
 
-      {/* Existing logs */}
-      {logs.length > 0 ? (
-        <div className="space-y-3">
-          {logs.map((log) => (
-            <div
-              key={log.id}
-              className="rounded-xl border border-slate-800 bg-slate-900 p-4"
+      {/* About */}
+      {peak.summary && (
+        <section className="mt-6 rounded-2xl border border-border bg-surface p-4">
+          <h2 className="mb-2 font-display text-lg font-bold text-ink">About {peak.name}</h2>
+          <p className="text-sm leading-relaxed text-ink-muted">{peak.summary}</p>
+          {peak.wikipedia_url && (
+            <a
+              href={peak.wikipedia_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex items-center gap-1 text-sm text-pine-600 hover:underline"
             >
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-medium text-slate-200">
-                  {new Date(log.summited_at).toLocaleDateString("en-US", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
+              Read on Wikipedia
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+            </a>
+          )}
+        </section>
+      )}
+
+      {/* Who's been up */}
+      {logs.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-3 font-display text-lg font-bold text-ink">Recent summits</h2>
+          <div className="space-y-2">
+            {logs.map((l) => (
+              <div key={l.id} className="rounded-xl border border-border bg-surface p-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-ink">
+                    {new Date(l.summited_at + "T12:00:00").toLocaleDateString(undefined, {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </span>
+                  {l.rating ? <span className="text-amber-600">{"★".repeat(l.rating)}</span> : null}
                 </div>
-                {log.rating && (
-                  <div className="text-sm text-peak-500">
-                    {"★".repeat(log.rating)}
-                    {"★".repeat(5 - log.rating).split("").map((_, i) => (
-                      <span key={i} className="text-slate-700">★</span>
-                    ))}
-                  </div>
-                )}
+                {l.notes && <p className="mt-1 text-sm text-ink-muted">{l.notes}</p>}
               </div>
-              {log.duration_minutes && (
-                <div className="mt-1 text-sm text-slate-400">
-                  {Math.floor(log.duration_minutes / 60)}h {log.duration_minutes % 60}m
-                  {log.weather && ` · ${log.weather}`}
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="mt-6">
+        <Reviews peakSlug={peak.slug} />
+      </div>
+
+      {/* Nearby */}
+      {nearby.length > 0 && (
+        <section className="mt-8">
+          <h2 className="mb-3 font-display text-lg font-bold text-ink">Nearby summits</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {nearby.map((n) => (
+              <Link
+                key={n.slug}
+                href={`/peaks/${n.slug}`}
+                className="rounded-xl border border-border bg-surface p-3 transition-colors hover:border-border-bright"
+              >
+                <div className="truncate text-sm font-semibold text-ink">{n.name}</div>
+                <div className="mt-0.5 font-mono text-xs text-ink-faint">
+                  {n.elevation_m.toLocaleString()} m
                 </div>
-              )}
-              {log.notes && (
-                <p className="mt-2 text-sm text-slate-300">{log.notes}</p>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-slate-500">
-          No summit logs yet. Be the first to log this peak!
-        </p>
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );
 }
+
+function RouteRow({ route, peakSlug }: { route: PeakRoute; peakSlug: string }) {
+  const access = accessInfo(route);
+  return (
+    <Link
+      href={`/record?peak=${peakSlug}&route=${route.id}`}
+      className="block rounded-xl border border-border bg-surface p-3 transition-colors hover:border-border-bright"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-semibold text-ink">
+              {route.name ?? "Unnamed path"}
+            </span>
+            {route.is_summit_route && (
+              <span className="shrink-0 rounded bg-pine-600/20 px-1.5 py-0.5 text-[10px] font-medium text-pine-600">
+                to the summit
+              </span>
+            )}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-xs text-ink-faint">
+            <span>{formatDistance(route.distance_km)}</span>
+            {route.ascent_m ? <span>↑ {route.ascent_m} m</span> : null}
+            <span>{formatDuration(route.est_time_min)}</span>
+            {route.route_type && <span>{route.route_type}</span>}
+            {!route.is_summit_route && route.distance_to_summit_m != null && (
+              <span>stops {route.distance_to_summit_m} m short</span>
+            )}
+          </div>
+          {access.length > 0 && (
+            <div className="mt-1 text-[11px] text-ink-faint">{access.join(" · ")}</div>
+          )}
+        </div>
+        {route.difficulty && (
+          <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[11px] text-ink-muted">
+            {route.difficulty}
+          </span>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+// Elevation is formatted in several places; keep one implementation.
+void formatElevation;

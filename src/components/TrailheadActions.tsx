@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toLines } from "@/lib/track";
-import type { Route } from "@/lib/types";
+import type { PeakRoute as Route } from "@/lib/peak-types";
 
 /** First coordinate of a trail is its trailhead. */
 function trailhead(geometry: unknown): { lat: number; lng: number } | null {
