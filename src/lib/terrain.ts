@@ -127,7 +127,7 @@ const ASCENT_THRESHOLD_M = 2;
  * reported a 130% sustained grade — a 52° slope — which is the artifact, not
  * the couloir.
  */
-const DEM_RESOLUTION_M = 30;
+export const DEM_RESOLUTION_M = 30;
 /** "Steepest" means sustained over this distance, not one lucky pair of pixels. */
 const GRADE_WINDOW_M = 200;
 
@@ -145,6 +145,22 @@ export function profileFromTerrain(
     if (e == null || !Number.isFinite(e)) return null; // tile not loaded yet — caller retries
     raw.push(e);
   }
+  return profileFromSamples(pts, raw, stepM);
+}
+
+/**
+ * The measurement itself, given the points and the elevation under each one.
+ *
+ * Split out of `profileFromTerrain` so the offline elevation pass, which reads
+ * DEM tiles in Node, and the peak page, which reads the terrain already loaded
+ * in the browser, compute ascent from identical code. A stored `ascent_m` that
+ * disagreed with the profile drawn underneath it is a bug the user can see.
+ */
+export function profileFromSamples(
+  pts: LngLat[],
+  raw: number[],
+  stepM = DEM_RESOLUTION_M
+): RouteProfile {
   const ele = denoise(raw);
 
   const samples: ElevationSample[] = [];

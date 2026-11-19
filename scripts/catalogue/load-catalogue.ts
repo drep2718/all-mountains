@@ -104,9 +104,69 @@ async function main() {
   const photos = await readNdjson<Record<string, unknown>>("photos.ndjson");
   const routes = await readNdjson<Record<string, unknown>>("routes.ndjson");
 
+  // The elevation pass is a separate file rather than an edit to routes.ndjson
+  // because that file belongs to the importer, which may still be appending to
+  // it. Merging here keeps both steps independently re-runnable.
+  const elevation = await readNdjson<Record<string, unknown>>("elevation.ndjson");
+  const elevationBy = new Map(
+    elevation.map((e) => [`${e.peak_slug}|${e.osm_id}`, e])
+  );
+  /**
+   * How far below the published summit a route may top out and still be
+   * called a summit route. Covers DEM error (median 17 m against published
+   * elevations) and a final few metres of rock a path does not cross.
+   */
+  const SUMMIT_VERTICAL_TOLERANCE_M = 60;
+
+  const elevationOf = new Map(
+    peaks.map((p) => [p.id as string, p.elevation_m as number])
+  );
+  let measured = 0;
+  let demoted = 0;
+  for (const r of routes) {
+    const e = elevationBy.get(`${r.peak_slug}|${r.osm_id}`);
+    if (!e) continue;
+    r.ascent_m = e.ascent_m;
+    r.descent_m = e.descent_m;
+    // Naismith with the climb included. Without this the stored time is the
+    // flat-walking figure the importer wrote as a placeholder.
+    r.est_time_min = e.est_time_min;
+    measured++;
+
+    // `is_summit_route` came out of the importer as `approach <= 500 m`,
+    // measured horizontally — which on a steep mountain favours exactly the
+    // wrong trail. Juneau's Perseverance Trail passes 104 m from the summit
+    // in plan view and tops out 830 m beneath it, and was labelled "Reaches
+    // the top"; the path that actually climbs Juneau lies 335 m out and so
+    // scored worse. Horizontal proximity cannot tell a summit path from the
+    // valley track that runs under it. Height can, now that it is measured.
+    if (r.is_summit_route) {
+      const summit = elevationOf.get(r.peak_slug as string);
+      if (
+        summit != null &&
+        summit - (e.max_ele_m as number) > SUMMIT_VERTICAL_TOLERANCE_M
+      ) {
+        r.is_summit_route = false;
+        demoted++;
+      }
+    }
+  }
+
   console.log(
     `\ncatalogue on disk:  ${peaks.length} peaks · ${photos.length} photos · ${routes.length} routes`
   );
+  console.log(
+    `elevation measured: ${measured}/${routes.length} routes` +
+      (measured < routes.length
+        ? `  (${routes.length - measured} still carry the flat-time placeholder — run elevation-pass.ts)`
+        : "")
+  );
+  if (demoted) {
+    console.log(
+      `summit claims dropped: ${demoted} routes passed near the summit in plan ` +
+        `view but top out >${SUMMIT_VERTICAL_TOLERANCE_M} m below it`
+    );
+  }
   if (!peaks.length) {
     console.error("no peaks.ndjson — run enrich-peaks.ts first");
     process.exitCode = 1;

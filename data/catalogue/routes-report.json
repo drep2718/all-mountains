@@ -1,13 +1,90 @@
 {
-  "ran_at": "2026-11-19T03:21:22.613Z",
-  "processed": 24,
-  "total_routes": 120,
-  "avg_per_peak": 5,
-  "peaks_with_no_routes": 2,
-  "failed": 0,
+  "ran_at": "2026-11-19T16:02:29.255Z",
+  "processed": 94,
+  "total_routes": 293,
+  "avg_per_peak": 3.1,
+  "peaks_with_no_routes": 30,
+  "failed": 12,
   "no_routes": [
-    "pioneer-peak-united-states",
-    "matanuska-peak-united-states"
+    "cerro-torre-argentina",
+    "mount-aspiring-tititea-new-zealand",
+    "aoraki-mount-cook-new-zealand",
+    "mount-wilhelm-papua-new-guinea",
+    "broad-peak-pakistan",
+    "mount-waddington-canada",
+    "kangchenjunga-nepal",
+    "makalu-nepal",
+    "mount-forbes-canada",
+    "mount-clemenceau-canada",
+    "mount-alberta-canada",
+    "mount-robson-canada",
+    "mount-caubvick-canada",
+    "mount-hubbard-canada",
+    "mount-vancouver-canada",
+    "mount-kennedy-canada",
+    "mount-alverstone-canada",
+    "mount-logan-canada",
+    "king-peak-canada",
+    "mount-lucania-canada",
+    "mount-steele-canada",
+    "mount-wood-canada",
+    "mount-thor-canada",
+    "mount-odin-canada",
+    "barbeau-peak-canada",
+    "manaslu-nepal",
+    "annapurna-nepal",
+    "dhaulagiri-nepal",
+    "nanga-parbat-pakistan",
+    "pachnes-lefka-ori-greece"
   ],
-  "failures": []
+  "failures": [
+    {
+      "slug": "parseierspitze-austria",
+      "why": "TypeError: fetch failed"
+    },
+    {
+      "slug": "kitzsteinhorn-austria",
+      "why": "TypeError: fetch failed"
+    },
+    {
+      "slug": "patscherkofel-austria",
+      "why": "TypeError: fetch failed"
+    },
+    {
+      "slug": "santis-switzerland",
+      "why": "TypeError: fetch failed"
+    },
+    {
+      "slug": "hoher-kasten-switzerland",
+      "why": "TypeError: fetch failed"
+    },
+    {
+      "slug": "nordkette-hafelekarspitze-austria",
+      "why": "TypeError: fetch failed"
+    },
+    {
+      "slug": "mount-jacques-cartier-canada",
+      "why": "TypeError: fetch failed"
+    },
+    {
+      "slug": "mount-benson-canada",
+      "why": "TypeError: fetch failed"
+    },
+    {
+      "slug": "cheam-peak-canada",
+      "why": "TypeError: fetch failed"
+    },
+    {
+      "slug": "mount-arrowsmith-canada",
+      "why": "TypeError: fetch failed"
+    },
+    {
+      "slug": "golden-ears-canada",
+      "why": "TypeError: fetch failed"
+    },
+    {
+      "slug": "grouse-mountain-canada",
+      "why": "TypeError: fetch failed"
+    }
+  ]
 }

@@ -232,6 +232,76 @@ async function main() {
     check(false, "hike-grade peaks have a route", hikeNoRoute.length / Math.max(hikePeaks.length, 1) < 0.15,
       `${hikeNoRoute.length} of ${hikePeaks.length} without (${pct(hikeNoRoute.length, hikePeaks.length)})`);
 
+    // --- elevation pass ---
+    // A route whose ascent is unmeasured still gets an `est_time_min`, and
+    // that number is Naismith with zero climb — Whitney's main trail as a 3½
+    // hour walk. Wrong beats absent here, so this is checked, not assumed.
+    const elevation = await nd<{
+      peak_slug: string;
+      osm_id: number;
+      ascent_m: number;
+      max_ele_m: number;
+    }>("elevation.ndjson");
+    const elevationBy = new Map(elevation.map((e) => [`${e.peak_slug}|${e.osm_id}`, e]));
+    const unmeasured = routes.filter((r) => !elevationBy.has(`${r.peak_slug}|${r.osm_id}`));
+    check(false, "ascent measured (target 95%)",
+      unmeasured.length / routes.length <= 0.05,
+      `${routes.length - unmeasured.length} of ${routes.length} (${pct(routes.length - unmeasured.length, routes.length)})`);
+
+    const negAscent = elevation.filter((e) => e.ascent_m < 0);
+    check(true, "ascent is never negative", negAscent.length === 0, `${negAscent.length}`);
+
+    // The importer's `is_summit_route` is `approach <= 500 m`, measured
+    // horizontally, which on a steep mountain prefers the valley track that
+    // runs beneath the summit over the path that climbs to it. The loader
+    // re-derives the flag from measured height; this applies the same rule so
+    // the gate tests what actually reaches the database.
+    const SUMMIT_VERTICAL_TOLERANCE_M = 60;
+    const shortfall = (r: Route): number | null => {
+      const pk = peakBySlug.get(r.peak_slug);
+      const e = elevationBy.get(`${r.peak_slug}|${r.osm_id}`);
+      return pk && e ? pk.elevation_m - e.max_ele_m : null;
+    };
+    const flaggedByImporter = routes.filter(
+      (r) => r.is_summit_route && elevationBy.has(`${r.peak_slug}|${r.osm_id}`)
+    );
+    const falseClaims = flaggedByImporter.filter((r) => {
+      const d = shortfall(r);
+      return d != null && d > SUMMIT_VERTICAL_TOLERANCE_M;
+    });
+    console.log(
+      `  info  ${"horizontal summit flag overturned".padEnd(44)} ` +
+        `${falseClaims.length} of ${flaggedByImporter.length} ` +
+        `(${pct(falseClaims.length, flaggedByImporter.length)}) top out >${SUMMIT_VERTICAL_TOLERANCE_M} m low`
+    );
+    falseClaims
+      .sort((a, b) => (shortfall(b) ?? 0) - (shortfall(a) ?? 0))
+      .slice(0, 4)
+      .forEach((r) =>
+        console.log(
+          `        ${r.peak_slug}: tops out ${Math.round(shortfall(r)!)} m below the summit ` +
+            `yet passes ${r.distance_to_summit_m} m from it — "${r.name ?? "unnamed"}"`
+        )
+      );
+
+    // What the database will hold: after the vertical test, a route claiming
+    // the summit must actually reach it.
+    const corrected = flaggedByImporter.filter((r) => {
+      const d = shortfall(r);
+      return d == null || d <= SUMMIT_VERTICAL_TOLERANCE_M;
+    });
+    const stillOff = corrected.filter((r) => (shortfall(r) ?? 0) > 250);
+    check(true, "summit routes reach the summit (after the fix)", stillOff.length === 0,
+      `${corrected.length} genuine, ${stillOff.length} still wrong`);
+
+    // Losing every summit route on a peak is honest when the OSM geometry
+    // stops low, but if it happened everywhere the tolerance would be wrong.
+    const peaksKeeping = new Set(corrected.map((r) => r.peak_slug));
+    const peaksClaiming = new Set(flaggedByImporter.map((r) => r.peak_slug));
+    check(false, "peaks keep a genuine summit route",
+      peaksKeeping.size / Math.max(peaksClaiming.size, 1) > 0.7,
+      `${peaksKeeping.size} of ${peaksClaiming.size} (${pct(peaksKeeping.size, peaksClaiming.size)})`);
+
     const summitRoutes = routes.filter((r) => r.is_summit_route);
     console.log(
       `  info  ${"routes per peak".padEnd(44)} avg ${(routes.length / peaksWithRoutes.size).toFixed(1)}, ` +

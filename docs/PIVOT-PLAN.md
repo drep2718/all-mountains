@@ -587,3 +587,52 @@ Caught by screenshot, not by typecheck or lint. All fixed to dark-on-tint.
 - **SummitMind broke the production build.** Its config called `required()` at module
   scope, so importing it aborted `next build` with "Missing required env var: QDRANT_URL".
   Now lazy via getters — a module should not throw while being imported.
+
+---
+
+## Finishing pass — the elevation gap (2026-11-19)
+
+`import-routes.ts:417` wrote `ascent_m: null, // filled by the elevation pass`.
+No such pass existed. All 8,259 routes carried `ascent_m = NULL`, and the
+consequence was not a missing field but a wrong one: `est_time_min` came from
+`naismith(km, null)`, which is 12 min/km with the climb counted as zero. Mount
+Whitney's 17 km main trail was published as 3 h 24 rather than ~5 h 30.
+
+The peak pages were never affected — `PeakTerrain3D` samples the DEM in the
+browser and computes the profile live — so the bug was invisible exactly where
+a reviewer would look, and visible on `/routes/[id]`, which reads the stored
+columns.
+
+**Fixed by:**
+
+- `src/lib/terrain.ts` — extracted `profileFromSamples(pts, ele, stepM)` out of
+  `profileFromTerrain`. The browser and the new Node pass now compute ascent
+  from the same code, so a stored `ascent_m` cannot disagree with the profile
+  drawn under it.
+- `scripts/catalogue/elevation-pass.ts` — samples `mapbox-terrain-dem-v1`
+  `.pngraw` tiles in Node (bilinear, `sharp` to decode), peak by peak so routes
+  up one mountain share their tiles. Writes `data/catalogue/elevation.ndjson`,
+  never `routes.ndjson`, so it is independent of the importer.
+- `load-catalogue.ts` — merges that file and reports how many routes are still
+  on the placeholder.
+- `audit-catalogue.ts` — gates on measured coverage, non-negative ascent, and
+  summit routes topping out within 250 m of the published elevation.
+
+### Two predictions that were wrong
+
+**The DEM pyramid does not cost ascent.** The assumption was that a lower zoom
+is a smoothed surface, so it would shave the ridges where a summit route's
+climb is. Measured over 111 routes, total ascent at z11/z12/z13/z14 was
+99.6% / 99.9% / 99.9% / 100% of the z14 figure, with the largest single
+disagreement 4 m on Bird Ridge's 1,258 m. The 30 m resample step sets the
+resolution, not the tile zoom. z14 was kept anyway, for a different and better
+reason: the peak page reads this DEM at `DEM_MAXZOOM = 14`, and exact agreement
+is the point of sharing the function.
+
+**A 5-point median does not remove alternating noise.** Three of the new tests
+failed on my expectations, not the code: the median of `[+1,−1,+1,−1,+1]` is
+`+1`, so perfect alternation survives `denoise` untouched. What actually
+suppresses jitter is the 2 m `ASCENT_THRESHOLD_M`. The same window clips a
+saddle's apex by one step, so a 500 m climb measures 490 — and
+`estimateMinutes(17, 1860, 1860)` is 328 min, not the >367 I had asserted.
+Tests now encode the measured behaviour.
