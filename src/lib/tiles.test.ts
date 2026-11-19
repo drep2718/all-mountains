@@ -213,3 +213,27 @@ describe("planMountainTiles picks the cheaper strategy", () => {
     }
   });
 });
+
+describe("demTileUrl", () => {
+  it("points at the terrain DEM and carries the token", async () => {
+    const { demTileUrl } = await import("./tiles");
+    const u = demTileUrl({ z: 14, x: 2621, y: 6334 }, "tok");
+    expect(u).toContain("mapbox.mapbox-terrain-dem-v1");
+    expect(u).toContain("access_token=tok");
+    expect(u).toContain("/14/2621/6334");
+  });
+
+  it("collapses zooms above 14 onto the DEM's own maximum", async () => {
+    const { demTileUrl } = await import("./tiles");
+    // z15 tile (x,y) maps to the z14 parent (x>>1, y>>1)
+    const u = demTileUrl({ z: 15, x: 5242, y: 12668 }, "tok");
+    expect(u).toContain("/14/2621/6334");
+  });
+
+  it("is stable, so repeated downloads reuse the cached tile", async () => {
+    const { demTileUrl } = await import("./tiles");
+    expect(demTileUrl({ z: 12, x: 655, y: 1583 }, "tok")).toBe(
+      demTileUrl({ z: 12, x: 655, y: 1583 }, "tok")
+    );
+  });
+});

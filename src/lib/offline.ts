@@ -268,7 +268,7 @@ export { formatBytes };
 // disc over the summit, the photographs, and the page that renders it all.
 // ---------------------------------------------------------------------------
 
-import { planMountainTiles } from "@/lib/tiles";
+import { demTileUrl, planMountainTiles } from "@/lib/tiles";
 import { decodeSegments } from "@/lib/polyline";
 
 const PEAK_INDEX_KEY = "am.offline.peaks";
@@ -333,11 +333,16 @@ export function estimatePeakDownload(input: Pick<PeakDownloadInput, "routePolys"
   const plan = planMountainTiles(lines, { lat: input.latitude, lng: input.longitude });
   // Commons thumbnails at 1600px run ~250 KB; close enough to warn on.
   const photoBytes = input.photoUrls.length * 250 * 1024;
+  // The DEM collapses to zoom 14, so it is far fewer tiles than the imagery.
+  const demCount = new Set(
+    plan.tiles.map((t) => `${Math.min(t.z, 14)}/${t.x >> Math.max(0, t.z - 14)}/${t.y >> Math.max(0, t.z - 14)}`)
+  ).size;
+  const bytes = plan.estimatedBytes + photoBytes + demCount * 18 * 1024;
   return {
-    tileCount: plan.tiles.length,
+    tileCount: plan.tiles.length + demCount,
     byZoom: plan.byZoom,
-    bytes: plan.estimatedBytes + photoBytes,
-    label: formatBytes(plan.estimatedBytes + photoBytes),
+    bytes,
+    label: formatBytes(bytes),
   };
 }
 
@@ -353,7 +358,10 @@ export async function downloadPeak(
 ): Promise<DownloadedPeak> {
   const lines = input.routePolys.flatMap((p) => decodeSegments(p));
   const plan = planMountainTiles(lines, { lat: input.latitude, lng: input.longitude });
-  const urls = plan.tiles.map((t) => tileUrl(t, token));
+  // Imagery plus the terrain DEM underneath it. Deduplicated because several
+  // zoom levels collapse onto the same DEM tile.
+  const demUrls = [...new Set(plan.tiles.map((t) => demTileUrl(t, token)))];
+  const urls = [...plan.tiles.map((t) => tileUrl(t, token)), ...demUrls];
   const reg = await swReady();
   const id = `dlp_${input.slug}_${Date.now()}`;
 

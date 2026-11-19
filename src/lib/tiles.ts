@@ -83,6 +83,25 @@ export function tileUrl(t: Tile, token: string, style = "outdoors-v12"): string 
   return `https://api.mapbox.com/styles/v1/mapbox/${style}/tiles/512/${t.z}/${t.x}/${t.y}@2x?access_token=${token}`;
 }
 
+/**
+ * Terrain DEM tile.
+ *
+ * Needed offline as well as the imagery: navigation reads elevation out of
+ * this to report how much climbing is left, and the 3-D view is built on it.
+ * Without these in the cache both silently degrade on the mountain, which is
+ * the one place they matter.
+ *
+ * The DEM tops out at zoom 14 and is a single 512px tile per cell, so it adds
+ * roughly a fifth of what the imagery costs.
+ */
+export function demTileUrl(t: Tile, token: string): string {
+  const z = Math.min(t.z, 14);
+  const scale = Math.pow(2, t.z - z);
+  const x = Math.floor(t.x / scale);
+  const y = Math.floor(t.y / scale);
+  return `https://api.mapbox.com/v4/mapbox.mapbox-terrain-dem-v1/${z}/${x}/${y}@2x.webp?access_token=${token}`;
+}
+
 // ---------------------------------------------------------------------------
 // Corridor tiling
 //
