@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { Profile } from "@/lib/types";
+import type { Profile } from "@/lib/peak-types";
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);

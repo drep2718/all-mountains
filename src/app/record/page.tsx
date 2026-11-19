@@ -8,7 +8,7 @@ import TrackerPanel from "@/components/TrackerPanel";
 import { useTracker } from "@/hooks/useTracker";
 import { toLines, computeStats } from "@/lib/track";
 import { newId, saveActivity } from "@/lib/trackStore";
-import type { Route } from "@/lib/types";
+import type { PeakRoute as Route } from "@/lib/peak-types";
 
 function RecordInner() {
   const params = useSearchParams();

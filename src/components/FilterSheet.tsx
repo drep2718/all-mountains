@@ -4,7 +4,7 @@ import {
   type Filters, DIFFICULTIES, ROUTE_TYPES, ACTIVITIES, FEATURES,
   LENGTH_CAP, toggle, activeFilterCount, DEFAULT_FILTERS,
 } from "@/lib/filters";
-import { DIFFICULTY_HEX } from "@/lib/types";
+import { DIFFICULTY_HEX, DIFFICULTY_LABEL, type PeakDifficulty } from "@/lib/peak-types";
 
 interface Props {
   open: boolean;
@@ -63,7 +63,7 @@ export default function FilterSheet({ open, filters, onChange, onClose, resultCo
                 <Chip key={d} active={filters.difficulty.includes(d)}
                   onClick={() => set({ difficulty: toggle(filters.difficulty, d) })}>
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: DIFFICULTY_HEX[d] }} />
-                  {d}
+                  {DIFFICULTY_LABEL[d]}
                 </Chip>
               ))}
             </div>

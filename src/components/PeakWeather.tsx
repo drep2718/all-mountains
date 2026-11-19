@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Summit weather from Open-Meteo.
@@ -54,13 +54,21 @@ export default function PeakWeather({
   latitude,
   longitude,
   elevationM,
+  onCurrent,
 }: {
   latitude: number;
   longitude: number;
   elevationM: number;
+  /** Reports the current summit conditions so the hazard panel can use them. */
+  onCurrent?: (c: { tempC: number; windKph: number; code: number } | null) => void;
 }) {
   const [data, setData] = useState<Forecast | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "error" | "offline">("loading");
+  // Held in a ref so a new callback identity can't re-trigger the fetch.
+  const onCurrentRef = useRef(onCurrent);
+  useEffect(() => {
+    onCurrentRef.current = onCurrent;
+  });
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -78,8 +86,16 @@ export default function PeakWeather({
           `&timezone=auto&forecast_days=7`;
         const res = await fetch(url, { signal: ctrl.signal });
         if (!res.ok) throw new Error(String(res.status));
-        setData((await res.json()) as Forecast);
+        const body = (await res.json()) as Forecast;
+        setData(body);
         setState("ok");
+        if (body.current) {
+          onCurrentRef.current?.({
+            tempC: body.current.temperature_2m,
+            windKph: body.current.wind_speed_10m,
+            code: body.current.weather_code,
+          });
+        }
       } catch (e) {
         if ((e as Error).name !== "AbortError") setState("error");
       }

@@ -2,7 +2,7 @@
 // This gives every trail a real map thumbnail from its own geometry —
 // no photo backfill or storage needed.
 
-import type { Route } from "./types";
+import type { PeakRoute as Route } from "./peak-types";
 import { decodeSegments } from "./polyline";
 
 // Google polyline encoding (precision 5) — the compact format Mapbox's

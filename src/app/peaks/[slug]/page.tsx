@@ -19,11 +19,21 @@ import {
   type SummitLog,
 } from "@/lib/peak-types";
 import { getPeakDownload } from "@/lib/offline";
+import dynamic from "next/dynamic";
 import PeakGallery from "@/components/PeakGallery";
+import RouteProfileChart from "@/components/RouteProfileChart";
+import HazardPanel from "@/components/HazardPanel";
+import { assessHazards, estimateMinutes, type RouteProfile } from "@/lib/terrain";
 import PeakWeather from "@/components/PeakWeather";
 import DownloadPeakButton from "@/components/DownloadPeakButton";
 import LogSummitPanel from "@/components/LogSummitPanel";
 import Reviews from "@/components/Reviews";
+
+// Mapbox GL touches `window` at import time.
+const PeakTerrain3D = dynamic(() => import("@/components/PeakTerrain3D"), {
+  ssr: false,
+  loading: () => <div className="h-full w-full animate-pulse rounded-2xl bg-surface-2" />,
+});
 
 interface Bundle {
   peak: Peak;
@@ -41,6 +51,12 @@ export default function PeakPage() {
   const [logs, setLogs] = useState<SummitLog[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "missing">("loading");
   const [rank, setRank] = useState<{ place: number; of: number } | null>(null);
+  /** Measured off the terrain model by the 3-D view, keyed by route id. */
+  const [profiles, setProfiles] = useState<Map<number, RouteProfile>>(new Map());
+  const [selectedRoute, setSelectedRoute] = useState<number | null>(null);
+  const [weather, setWeather] = useState<{ tempC: number; windKph: number; code: number } | null>(
+    null
+  );
   const [fromCache, setFromCache] = useState(false);
 
   // Offline bundle first, network second. If this inverts, the one screen that
@@ -194,6 +210,19 @@ export default function PeakPage() {
   const { peak, photos, routes } = data;
   const summitRoutes = routes.filter((r) => r.is_summit_route);
   const approachRoutes = routes.filter((r) => !r.is_summit_route);
+  const ordered = [...summitRoutes, ...approachRoutes];
+  const activeId = selectedRoute ?? ordered[0]?.id ?? null;
+  const activeRoute = ordered.find((r) => r.id === activeId) ?? null;
+  const activeProfile = activeId != null ? (profiles.get(activeId) ?? null) : null;
+
+  const hazards = assessHazards({
+    summitElevationM: peak.elevation_m,
+    difficulty: peak.difficulty,
+    profile: activeProfile,
+    distanceKm: activeRoute?.distance_km ?? null,
+    latitude: peak.latitude,
+    weather,
+  });
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 pb-24">
@@ -239,6 +268,26 @@ export default function PeakPage() {
           {[peak.range_name, peak.region, peak.country].filter(Boolean).join(" · ")}
         </p>
       </div>
+
+      {/* The mountain itself */}
+      {typeof window !== "undefined" && (
+        <section className="mt-5">
+          <div className="mb-2 flex items-baseline justify-between">
+            <h2 className="font-display text-lg font-bold text-ink">The mountain in 3D</h2>
+            <span className="text-xs text-ink-faint">
+              {routes.length > 0 ? "summit paths drawn on the terrain" : "terrain view"}
+            </span>
+          </div>
+          <PeakTerrain3D
+            peak={peak}
+            routes={routes}
+            activeRouteId={activeId}
+            onRouteHover={(id) => id != null && setSelectedRoute(id)}
+            onProfile={setProfiles}
+            className="h-[22rem] sm:h-[30rem]"
+          />
+        </section>
+      )}
 
       {/* Stats */}
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -289,19 +338,39 @@ export default function PeakPage() {
             {noRoutesMessage(peak)}
           </p>
         ) : (
-          <div className="space-y-2">
-            {[...summitRoutes, ...approachRoutes].map((r) => (
-              <RouteRow key={r.id} route={r} peakSlug={peak.slug} />
-            ))}
-          </div>
+          <>
+            <div className="space-y-2">
+              {ordered.map((r) => (
+                <RouteRow
+                  key={r.id}
+                  route={r}
+                  peakSlug={peak.slug}
+                  profile={profiles.get(r.id) ?? null}
+                  difficulty={peak.difficulty}
+                  selected={r.id === activeId}
+                  onSelect={() => setSelectedRoute(r.id)}
+                />
+              ))}
+            </div>
+
+            {/* Profile of whichever route is selected. */}
+            <div className="mt-3">
+              <RouteProfileChart profile={activeProfile} />
+            </div>
+          </>
         )}
       </section>
 
       <div className="mt-6">
+        <HazardPanel hazards={hazards} />
+      </div>
+
+      <div className="mt-4">
         <PeakWeather
           latitude={peak.latitude}
           longitude={peak.longitude}
           elevationM={peak.elevation_m}
+          onCurrent={setWeather}
         />
       </div>
 
@@ -378,12 +447,44 @@ export default function PeakPage() {
   );
 }
 
-function RouteRow({ route, peakSlug }: { route: PeakRoute; peakSlug: string }) {
+function RouteRow({
+  route,
+  peakSlug,
+  profile,
+  difficulty,
+  selected,
+  onSelect,
+}: {
+  route: PeakRoute;
+  peakSlug: string;
+  profile: RouteProfile | null;
+  difficulty: Peak["difficulty"];
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const access = accessInfo(route);
+  // Prefer what we measured off the terrain over what the import guessed.
+  const km = profile?.distanceKm ?? route.distance_km;
+  const ascent = profile?.ascentM ?? route.ascent_m;
+  const minutes = profile
+    ? estimateMinutes(profile.distanceKm, profile.ascentM, profile.descentM, difficulty)
+    : route.est_time_min;
+
   return (
-    <Link
-      href={`/record?peak=${peakSlug}&route=${route.id}`}
-      className="block rounded-xl border border-border bg-surface p-3 transition-colors hover:border-border-bright"
+    <div
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+      className={`block cursor-pointer rounded-xl border bg-surface p-3 transition-colors ${
+        selected ? "border-pine-600 ring-1 ring-pine-600/30" : "border-border hover:border-border-bright"
+      }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -398,9 +499,10 @@ function RouteRow({ route, peakSlug }: { route: PeakRoute; peakSlug: string }) {
             )}
           </div>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-xs text-ink-faint">
-            <span>{formatDistance(route.distance_km)}</span>
-            {route.ascent_m ? <span>↑ {route.ascent_m} m</span> : null}
-            <span>{formatDuration(route.est_time_min)}</span>
+            <span>{formatDistance(km)}</span>
+            {ascent ? <span>↑ {ascent.toLocaleString()} m</span> : null}
+            <span>{formatDuration(minutes)}</span>
+            {profile ? <span>max {profile.maxGrade}%</span> : null}
             {route.route_type && <span>{route.route_type}</span>}
             {!route.is_summit_route && route.distance_to_summit_m != null && (
               <span>stops {route.distance_to_summit_m} m short</span>
@@ -410,13 +512,22 @@ function RouteRow({ route, peakSlug }: { route: PeakRoute; peakSlug: string }) {
             <div className="mt-1 text-[11px] text-ink-faint">{access.join(" · ")}</div>
           )}
         </div>
-        {route.difficulty && (
-          <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[11px] text-ink-muted">
-            {route.difficulty}
-          </span>
-        )}
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {route.difficulty && (
+            <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-ink-muted">
+              {route.difficulty}
+            </span>
+          )}
+          <Link
+            href={`/record?peak=${peakSlug}&route=${route.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-lg bg-pine-600 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-pine-500"
+          >
+            Navigate
+          </Link>
+        </div>
       </div>
-    </Link>
+    </div>
   );
 }
 

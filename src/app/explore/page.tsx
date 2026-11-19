@@ -7,8 +7,8 @@ import { createClient } from "@/lib/supabase/client";
 import Map, { type Bounds } from "@/components/Map";
 import FilterSheet from "@/components/FilterSheet";
 import LocationSearch from "@/components/LocationSearch";
-import type { Peak, Route } from "@/lib/types";
-import { getDifficulty, getDifficultyColor } from "@/lib/types";
+import type { Peak, PeakRoute as Route } from "@/lib/peak-types";
+import { DIFFICULTY_LABEL, difficultyClasses } from "@/lib/peak-types";
 import { type Filters, DEFAULT_FILTERS, routeMatches, activeFilterCount } from "@/lib/filters";
 import type { GeocodeResult } from "@/lib/geocode";
 
@@ -69,7 +69,7 @@ function ExploreInner() {
   useEffect(() => {
     if (!focusPeakId) return;
     (async () => {
-      const { data } = await supabase.from("peaks").select("*").eq("id", focusPeakId).single();
+      const { data } = await supabase.from("peaks").select("*").eq("slug", focusPeakId).single();
       if (data) {
         const p = data as Peak;
         setFocusBounds([p.longitude - 0.06, p.latitude - 0.06, p.longitude + 0.06, p.latitude + 0.06]);
@@ -115,8 +115,8 @@ function ExploreInner() {
   // Apply filters client-side to what's loaded
   const shownPeaks = useMemo(() => {
     let ps = peaks;
-    if (filters.iconicOnly) ps = ps.filter((p) => p.is_iconic);
-    if (filters.difficulty.length) ps = ps.filter((p) => filters.difficulty.includes(getDifficulty(p.elevation)));
+    if (filters.iconicOnly) ps = ps.filter((p) => p.category === "highpoint");
+    if (filters.difficulty.length) ps = ps.filter((p) => filters.difficulty.includes(p.difficulty));
     return ps;
   }, [peaks, filters.difficulty, filters.iconicOnly]);
 
@@ -211,19 +211,19 @@ function ExploreInner() {
           ) : tab === "peaks" ? (
             <div className="space-y-2">
               {shownPeaks.map((peak) => {
-                const diff = getDifficulty(peak.elevation);
+                const diff = peak.difficulty;
                 return (
-                  <Link key={peak.id} href={`/peaks/${peak.id}`} className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3 transition-colors hover:border-border-bright">
+                  <Link key={peak.slug} href={`/peaks/${peak.slug}`} className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3 transition-colors hover:border-border-bright">
                     <div className="topo-texture flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface-2">
-                      {peak.photo_url ? <img src={peak.photo_url} alt="" className="h-full w-full object-cover" /> : <span className="text-xl opacity-40">⛰</span>}
+                      {peak.hero_photo_url ? <img src={peak.hero_photo_url} alt="" className="h-full w-full object-cover" /> : <span className="text-xl opacity-40">⛰</span>}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-display font-semibold text-ink">{peak.name || "Unnamed Peak"}</div>
                       <div className="text-sm text-ink-muted">{peak.country}</div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      {peak.elevation && <span className="font-mono text-sm font-medium text-pine-600">{peak.elevation.toLocaleString()}m</span>}
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getDifficultyColor(diff)}`}>{diff}</span>
+                      <span className="font-mono text-sm font-medium text-pine-600">{peak.elevation_m.toLocaleString()}m</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${difficultyClasses(diff)}`}>{DIFFICULTY_LABEL[diff]}</span>
                     </div>
                   </Link>
                 );

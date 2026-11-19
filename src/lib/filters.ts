@@ -1,7 +1,7 @@
-import type { Difficulty } from "./types";
+import type { PeakDifficulty } from "./peak-types";
 
 export interface Filters {
-  difficulty: Difficulty[];
+  difficulty: PeakDifficulty[];
   routeType: string[];
   activities: string[];
   features: string[];
@@ -22,7 +22,8 @@ export const DEFAULT_FILTERS: Filters = {
 
 export const LENGTH_CAP = 50; // km; slider max, treated as "no upper limit"
 
-export const DIFFICULTIES: Difficulty[] = ["Easy", "Moderate", "Hard", "Expert", "Extreme"];
+// A climb's grade, as the catalogue states it — not a band derived from height.
+export const DIFFICULTIES: PeakDifficulty[] = ["hike", "scramble", "technical"];
 export const ROUTE_TYPES = ["Loop", "Out & Back", "Point to Point"];
 
 // Activities — only Hiking has data today (we import route=hiking). The rest are
@@ -65,7 +66,7 @@ export function routeMatches(
   r: { difficulty: string | null; route_type: string | null; distance_km: number | null; features?: string[] | null },
   f: Filters
 ): boolean {
-  if (f.difficulty.length && !f.difficulty.includes(r.difficulty as Difficulty)) return false;
+  if (f.difficulty.length && !f.difficulty.includes(r.difficulty as PeakDifficulty)) return false;
   if (f.routeType.length && (!r.route_type || !f.routeType.includes(r.route_type))) return false;
   if (f.features.length && !f.features.every((x) => (r.features ?? []).includes(x))) return false;
   if (r.distance_km != null) {

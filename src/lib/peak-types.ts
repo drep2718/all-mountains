@@ -93,6 +93,19 @@ export interface PeakRoute {
   fee: string | null;
 }
 
+export interface Profile {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  home_latitude: number | null;
+  home_longitude: number | null;
+  search_radius_km: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SummitLog {
   id: number;
   user_id: string;

@@ -175,6 +175,7 @@ create table if not exists profiles (
   bio           text check (length(bio) <= 500),
   home_latitude double precision,
   home_longitude double precision,
+  search_radius_km int default 100,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );

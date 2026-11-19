@@ -3,8 +3,8 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-import type { Peak, Route } from "@/lib/types";
-import { getDifficulty, DIFFICULTY_HEX } from "@/lib/types";
+import type { Peak, PeakRoute as Route } from "@/lib/peak-types";
+import { DIFFICULTY_HEX } from "@/lib/peak-types";
 import { decodeSegments } from "@/lib/polyline";
 
 export interface Bounds {
@@ -36,12 +36,13 @@ function peaksToGeoJSON(peaks: Peak[]): GeoJSON.FeatureCollection {
       type: "Feature",
       geometry: { type: "Point", coordinates: [p.longitude, p.latitude] },
       properties: {
-        id: p.id,
-        name: p.name || "Unnamed Peak",
-        elevation: p.elevation,
+        id: p.slug,
+        name: p.name,
+        elevation: p.elevation_m,
         country: p.country,
-        color: DIFFICULTY_HEX[getDifficulty(p.elevation)],
-        iconic: p.is_iconic ? 1 : 0,
+        // Difficulty is stated by the catalogue, not inferred from height.
+        color: DIFFICULTY_HEX[p.difficulty],
+        iconic: p.category === "highpoint" ? 1 : 0,
       },
     })),
   };
@@ -279,7 +280,7 @@ export default function Map({
         const f = e.features?.[0];
         if (!f) return;
         const props = f.properties as { id: number };
-        const peak = peaksRef.current.find((p) => p.id === Number(props.id));
+        const peak = peaksRef.current.find((p) => p.slug === String(props.id));
         if (peak) cb.current.onPeakClick?.(peak);
       };
       m.on("click", "peak-point", handlePeakClick);
