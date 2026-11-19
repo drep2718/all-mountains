@@ -90,7 +90,7 @@ read -r -p "Continue? [y/N] " ok
 # One session, so the read-write override applies to everything after it.
 # DROP rather than DELETE: DELETE writes a WAL record per row and needs free
 # space this volume does not have, while DROP simply unlinks the files.
-# The table is recreated in its lean shape by sql/fresh-schema.sql.
+# The tables are recreated by sql/peaks-first-schema.sql.
 psql "$CONN" -v ON_ERROR_STOP=1 <<'SQL'
 set default_transaction_read_only = 'off';
 begin;
@@ -116,7 +116,7 @@ psql "$CONN" -qAt -c "
 
 echo
 echo "Space reclaimed. Next:"
-echo "  1. Recreate the lean tables — paste sql/fresh-schema.sql into the SQL editor."
+echo "  1. Recreate the tables — paste sql/peaks-first-schema.sql into the SQL editor."
 echo "     (It is create-if-not-exists throughout, so it only adds what is missing"
 echo "      and leaves your peaks alone.)"
 echo "  2. Re-import trails:  ./.loop/reimport-lean.sh"

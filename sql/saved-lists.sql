@@ -1,3 +1,0 @@
--- MOVED: this is now a version-controlled migration.
--- Canonical file: supabase/migrations/20260722000100_saved_lists.sql
--- Apply it with:  supabase db push   (see supabase/README.md)
