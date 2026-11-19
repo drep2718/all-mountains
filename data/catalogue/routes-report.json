@@ -1,0 +1,13 @@
+{
+  "ran_at": "2026-11-19T03:21:22.613Z",
+  "processed": 24,
+  "total_routes": 120,
+  "avg_per_peak": 5,
+  "peaks_with_no_routes": 2,
+  "failed": 0,
+  "no_routes": [
+    "pioneer-peak-united-states",
+    "matanuska-peak-united-states"
+  ],
+  "failures": []
+}

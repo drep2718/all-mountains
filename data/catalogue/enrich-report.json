@@ -1,0 +1,331 @@
+{
+  "ran_at": "2026-11-19T02:43:30.144Z",
+  "processed": 1032,
+  "matched": 859,
+  "missed": 173,
+  "with_photo": 738,
+  "match_rate": 0.832,
+  "photo_rate": 0.715,
+  "misses": [
+    {
+      "id": "bird-ridge-united-states",
+      "why": "Bird Ridge: 18665 km away — different mountain"
+    },
+    {
+      "id": "mount-baldy-eagle-river-united-states",
+      "why": "Mount Baldy: disambiguation page"
+    },
+    {
+      "id": "mount-kimball-united-states",
+      "why": "Mount Kimball: 4160 km away — different mountain"
+    },
+    {
+      "id": "picacho-peak-united-states",
+      "why": "Picacho Peak: unrecognised type Q37944886"
+    },
+    {
+      "id": "flatiron-superstition-mountains-united-states",
+      "why": "Flatiron (Superstition Mountains): no article"
+    },
+    {
+      "id": "wasson-peak-united-states",
+      "why": "Wasson Peak: no article"
+    },
+    {
+      "id": "rich-mountain-united-states",
+      "why": "Rich Mountain: disambiguation page"
+    },
+    {
+      "id": "mount-shasta-united-states",
+      "why": "Mount Shasta: no article"
+    },
+    {
+      "id": "iron-mountain-san-diego-united-states",
+      "why": "Iron Mountain (San Diego): no article"
+    },
+    {
+      "id": "mount-hollywood-united-states",
+      "why": "Mount Hollywood: 41 km away — different mountain"
+    },
+    {
+      "id": "crestone-peak-united-states",
+      "why": "Crestone Peak: wikidata lookup failed"
+    },
+    {
+      "id": "torreys-peak-united-states",
+      "why": "Torreys Peak: wikidata lookup failed"
+    },
+    {
+      "id": "castle-peak-colorado-united-states",
+      "why": "Castle Peak (Colorado): no article"
+    },
+    {
+      "id": "mount-oxford-united-states",
+      "why": "Mount Oxford: disambiguation page"
+    },
+    {
+      "id": "mount-democrat-united-states",
+      "why": "Mount Democrat: wikidata lookup failed"
+    },
+    {
+      "id": "tabeguache-peak-united-states",
+      "why": "Tabeguache Peak: wikidata lookup failed"
+    },
+    {
+      "id": "snowmass-mountain-united-states",
+      "why": "Snowmass Mountain: no article"
+    },
+    {
+      "id": "pikes-peak-united-states",
+      "why": "Pikes Peak: no article"
+    },
+    {
+      "id": "flattop-mountain-colorado-united-states",
+      "why": "Flattop Mountain (Colorado): no article"
+    },
+    {
+      "id": "chief-mountain-united-states",
+      "why": "Chief Mountain: 1212 km away — different mountain"
+    },
+    {
+      "id": "mount-sanitas-united-states",
+      "why": "Mount Sanitas: no article"
+    },
+    {
+      "id": "sleeping-giant-united-states",
+      "why": "Sleeping Giant: disambiguation page"
+    },
+    {
+      "id": "rabun-bald-united-states",
+      "why": "Rabun Bald: wikidata lookup failed"
+    },
+    {
+      "id": "springer-mountain-united-states",
+      "why": "Springer Mountain: no article"
+    },
+    {
+      "id": "tray-mountain-united-states",
+      "why": "Tray Mountain: no article"
+    },
+    {
+      "id": "blood-mountain-united-states",
+      "why": "Blood Mountain: no article"
+    },
+    {
+      "id": "kuliouou-ridge-united-states",
+      "why": "Kuliouou Ridge: no article"
+    },
+    {
+      "id": "koko-crater-united-states",
+      "why": "Koko Crater: unrecognised type Q109391"
+    },
+    {
+      "id": "table-rock-boise-united-states",
+      "why": "Table Rock (Boise): no article"
+    },
+    {
+      "id": "williams-hill-united-states",
+      "why": "Williams Hill: no article"
+    },
+    {
+      "id": "dorr-mountain-united-states",
+      "why": "Dorr Mountain: no article"
+    },
+    {
+      "id": "champlain-mountain-united-states",
+      "why": "Champlain Mountain: no article"
+    },
+    {
+      "id": "hoye-crest-backbone-mountain-united-states",
+      "why": "Hoye-Crest (Backbone Mountain): no article"
+    },
+    {
+      "id": "mount-wachusett-united-states",
+      "why": "Mount Wachusett: no article"
+    },
+    {
+      "id": "mount-everett-united-states",
+      "why": "Mount Everett: no article"
+    },
+    {
+      "id": "mount-greylock-united-states",
+      "why": "Mount Greylock: wikidata lookup failed"
+    },
+    {
+      "id": "brockway-mountain-united-states",
+      "why": "Brockway Mountain: unrecognised type Q34442"
+    },
+    {
+      "id": "summit-peak-porcupine-mountains-united-states",
+      "why": "Summit Peak (Porcupine Mountains): no article"
+    },
+    {
+      "id": "sugarloaf-mountain-michigan-united-states",
+      "why": "Sugarloaf Mountain (Michigan): no article"
+    },
+    {
+      "id": "hogback-mountain-united-states",
+      "why": "Hogback Mountain: disambiguation page"
+    },
+    {
+      "id": "bell-mountain-united-states",
+      "why": "Bell Mountain: disambiguation page"
+    },
+    {
+      "id": "oberg-mountain-united-states",
+      "why": "Oberg Mountain: no article"
+    },
+    {
+      "id": "lone-peak-united-states",
+      "why": "Lone Peak: 528 km away — different mountain"
+    },
+    {
+      "id": "mount-baldy-bridger-range-united-states",
+      "why": "Mount Baldy (Bridger Range): no article"
+    },
+    {
+      "id": "griffith-peak-united-states",
+      "why": "Griffith Peak: no article"
+    },
+    {
+      "id": "mount-washington-united-states",
+      "why": "Mount Washington: wikidata lookup failed"
+    },
+    {
+      "id": "turtlehead-peak-united-states",
+      "why": "Turtlehead Peak: no article"
+    },
+    {
+      "id": "mount-adams-new-hampshire-united-states",
+      "why": "Mount Adams (New Hampshire): wikidata lookup failed"
+    },
+    {
+      "id": "north-kinsman-mountain-united-states",
+      "why": "North Kinsman Mountain: no article"
+    },
+    {
+      "id": "lake-peak-united-states",
+      "why": "Lake Peak: 9795 km away — different mountain"
+    },
+    {
+      "id": "sierra-blanca-united-states",
+      "why": "Sierra Blanca: disambiguation page"
+    },
+    {
+      "id": "mount-skylight-united-states",
+      "why": "Mount Skylight: wikidata lookup failed"
+    },
+    {
+      "id": "dix-mountain-united-states",
+      "why": "Dix Mountain: wikidata lookup failed"
+    },
+    {
+      "id": "hawksbill-mountain-north-carolina-united-states",
+      "why": "Hawksbill Mountain (North Carolina): no article"
+    },
+    {
+      "id": "white-butte-united-states",
+      "why": "White Butte: disambiguation page"
+    },
+    {
+      "id": "hanging-rock-moores-knob-united-states",
+      "why": "Hanging Rock (Moores Knob): no article"
+    },
+    {
+      "id": "elk-mountain-wichita-mountains-united-states",
+      "why": "Elk Mountain (Wichita Mountains): no article"
+    },
+    {
+      "id": "middle-sister-united-states",
+      "why": "Middle Sister: disambiguation page"
+    },
+    {
+      "id": "north-sister-united-states",
+      "why": "North Sister: unrecognised type Q1200524/Q46831"
+    },
+    {
+      "id": "black-elk-peak-united-states",
+      "why": "Black Elk Peak: no article"
+    },
+    {
+      "id": "table-rock-south-carolina-united-states",
+      "why": "Table Rock (South Carolina): no article"
+    },
+    {
+      "id": "little-devils-tower-united-states",
+      "why": "Little Devils Tower: no article"
+    },
+    {
+      "id": "pinnacle-mountain-south-carolina-united-states",
+      "why": "Pinnacle Mountain (South Carolina): wikidata lookup failed"
+    },
+    {
+      "id": "bear-butte-united-states",
+      "why": "Bear Butte: wikidata lookup failed"
+    },
+    {
+      "id": "observation-point-united-states",
+      "why": "Observation Point: 11977 km away — different mountain"
+    },
+    {
+      "id": "mount-abraham-vermont-united-states",
+      "why": "Mount Abraham (Vermont): wikidata lookup failed"
+    },
+    {
+      "id": "whitetop-mountain-united-states",
+      "why": "Whitetop Mountain: no article"
+    },
+    {
+      "id": "bearfence-mountain-united-states",
+      "why": "Bearfence Mountain: no article"
+    },
+    {
+      "id": "sharp-top-united-states",
+      "why": "Sharp Top: no article"
+    },
+    {
+      "id": "mcafee-knob-united-states",
+      "why": "McAfee Knob: wikidata lookup failed"
+    },
+    {
+      "id": "humpback-rocks-united-states",
+      "why": "Humpback Rocks: no article"
+    },
+    {
+      "id": "avalanche-peak-united-states",
+      "why": "Avalanche Peak: disambiguation page"
+    },
+    {
+      "id": "dome-de-neige-des-ecrins-france",
+      "why": "Dôme de Neige des Écrins: no article"
+    },
+    {
+      "id": "le-taillon-france",
+      "why": "Le Taillon: no article"
+    },
+    {
+      "id": "monte-generoso-switzerland",
+      "why": "Monte Generoso: no article"
+    },
+    {
+      "id": "moleson-switzerland",
+      "why": "Moléson: wikidata lookup failed"
+    },
+    {
+      "id": "monte-san-salvatore-switzerland",
+      "why": "Monte San Salvatore: no article"
+    },
+    {
+      "id": "sass-pordoi-italy",
+      "why": "Sass Pordoi: no article"
+    },
+    {
+      "id": "nuvolau-italy",
+      "why": "Nuvolau: no article"
+    },
+    {
+      "id": "grossvenediger-austria",
+      "why": "Grossvenediger: no article"
+    }
+  ]
+}
