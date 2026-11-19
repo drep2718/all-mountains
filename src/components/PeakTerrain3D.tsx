@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { decodeSegments, type LngLat } from "@/lib/polyline";
+import { buildStyle, DEM_SOURCE_ID, LABEL_FONT, type BaseStyle } from "@/lib/mapStyle";
 import { profileFromTerrain, type RouteProfile } from "@/lib/terrain";
 import type { Peak, PeakRoute } from "@/lib/peak-types";
 
@@ -17,7 +18,7 @@ import type { Peak, PeakRoute } from "@/lib/peak-types";
  * guess.
  */
 
-const DEM_SOURCE = "mapbox-dem";
+
 /**
  * Vertical exaggeration. 1.0 is truthful but reads flat on screen, because a
  * 2 km peak across 10 km of ground really is a gentle bump at true scale.
@@ -25,12 +26,7 @@ const DEM_SOURCE = "mapbox-dem";
  */
 const EXAGGERATION = 1.4;
 
-export type BaseStyle = "satellite" | "outdoors";
-
-const STYLE_URL: Record<BaseStyle, string> = {
-  satellite: "mapbox://styles/mapbox/satellite-streets-v12",
-  outdoors: "mapbox://styles/mapbox/outdoors-v12",
-};
+export type { BaseStyle };
 
 export default function PeakTerrain3D({
   peak,
@@ -64,15 +60,9 @@ export default function PeakTerrain3D({
   const addTerrainAndRoutes = useCallback((m: mapboxgl.Map) => {
     const { peak: p, routes: rs } = latest.current;
 
-    if (!m.getSource(DEM_SOURCE)) {
-      m.addSource(DEM_SOURCE, {
-        type: "raster-dem",
-        url: "mapbox://mapbox.mapbox-terrain-dem-v1",
-        tileSize: 512,
-        maxzoom: 14,
-      });
-    }
-    m.setTerrain({ source: DEM_SOURCE, exaggeration: EXAGGERATION });
+    // The DEM comes with the style now, so it is always the same URL the
+    // download cached.
+    m.setTerrain({ source: DEM_SOURCE_ID, exaggeration: EXAGGERATION });
 
     if (!m.getLayer("sky")) {
       m.addLayer({
@@ -181,6 +171,8 @@ export default function PeakTerrain3D({
         source: "summit",
         layout: {
           "text-field": ["concat", ["get", "name"], "  ", ["get", "ele"]],
+          // Named explicitly so the download caches the font actually used.
+          "text-font": [LABEL_FONT],
           "text-size": 13,
           "text-offset": [0, -1.6],
           "text-anchor": "bottom",
@@ -204,7 +196,7 @@ export default function PeakTerrain3D({
 
     const m = new mapboxgl.Map({
       container: container.current,
-      style: STYLE_URL.satellite,
+      style: buildStyle("satellite", token),
       center: [peak.longitude, peak.latitude],
       zoom: 13,
       pitch: 68,
@@ -260,8 +252,10 @@ export default function PeakTerrain3D({
     const m = map.current;
     if (!m || !ready || appliedStyle.current === style) return;
     appliedStyle.current = style;
+    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+    if (!token) return;
     m.once("style.load", () => addTerrainAndRoutes(m));
-    m.setStyle(STYLE_URL[style]);
+    m.setStyle(buildStyle(style, token));
   }, [style, ready, addTerrainAndRoutes]);
 
   // --- highlight the active route ---

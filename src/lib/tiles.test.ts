@@ -237,3 +237,41 @@ describe("demTileUrl", () => {
     );
   });
 });
+
+describe("downloaded tile URLs match what the renderer requests", () => {
+  it("the basemap template and the downloaded tile are the same endpoint", async () => {
+    const { tileUrl } = await import("./tiles");
+    const { rasterTemplate } = await import("./mapStyle");
+    const fromTemplate = rasterTemplate("outdoors", "tok")
+      .replace("{z}", "14").replace("{x}", "2621").replace("{y}", "6334");
+    expect(tileUrl({ z: 14, x: 2621, y: 6334 }, "tok", "outdoors-v12")).toBe(fromTemplate);
+  });
+
+  it("the satellite template matches too", async () => {
+    const { tileUrl } = await import("./tiles");
+    const { rasterTemplate } = await import("./mapStyle");
+    const fromTemplate = rasterTemplate("satellite", "tok")
+      .replace("{z}", "12").replace("{x}", "655").replace("{y}", "1583");
+    expect(tileUrl({ z: 12, x: 655, y: 1583 }, "tok", "satellite-streets-v12")).toBe(fromTemplate);
+  });
+
+  it("the DEM template and the downloaded DEM tile are the same endpoint", async () => {
+    const { demTileUrl } = await import("./tiles");
+    const { demTemplate } = await import("./mapStyle");
+    const fromTemplate = demTemplate("tok")
+      .replace("{z}", "14").replace("{x}", "2621").replace("{y}", "6334");
+    expect(demTileUrl({ z: 14, x: 2621, y: 6334 }, "tok")).toBe(fromTemplate);
+  });
+
+  it("the service worker will cache every host these URLs use", async () => {
+    const { readFileSync } = await import("node:fs");
+    const sw = readFileSync("public/sw.js", "utf8");
+    const { rasterTemplate, demTemplate } = await import("./mapStyle");
+    for (const u of [rasterTemplate("satellite", "t"), demTemplate("t")]) {
+      const host = new URL(u.replace(/\{[zxy]\}/g, "1")).hostname;
+      // isMapboxAsset matches any *.mapbox.com host
+      expect(sw).toContain('hostname.endsWith("mapbox.com")');
+      expect(host.endsWith("mapbox.com")).toBe(true);
+    }
+  });
+});

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { buildStyle, LABEL_FONT } from "@/lib/mapStyle";
 
 const PROJECTION_KEY = "am.map.projection";
 
@@ -90,7 +91,7 @@ export default function SummitMap({
 
     const m = new mapboxgl.Map({
       container: container.current,
-      style: "mapbox://styles/mapbox/outdoors-v12",
+      style: buildStyle("outdoors", token),
       center: [-30, 40],
       zoom: 1.4,
       attributionControl: false,
@@ -146,6 +147,7 @@ export default function SummitMap({
         minzoom: 7,
         layout: {
           "text-field": ["get", "name"],
+          "text-font": [LABEL_FONT],
           "text-size": 11,
           "text-offset": [0, 1.1],
           "text-anchor": "top",

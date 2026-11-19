@@ -5,6 +5,7 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { LngLat } from "@/lib/polyline";
 import { profileFromTerrain, type RouteProfile } from "@/lib/terrain";
+import { buildStyle, DEM_SOURCE_ID } from "@/lib/mapStyle";
 
 /**
  * The live navigation map.
@@ -50,7 +51,7 @@ export default function NavMap({
     const start = position ?? routeLine[0] ?? summit;
     const m = new mapboxgl.Map({
       container: container.current,
-      style: "mapbox://styles/mapbox/outdoors-v12",
+      style: buildStyle("outdoors", token),
       center: start,
       zoom: 15,
       attributionControl: false,
@@ -64,13 +65,7 @@ export default function NavMap({
        * report how much climbing is left — the route rows carry no ascent,
        * because OSM geometry has no elevation.
        */
-      m.addSource("nav-dem", {
-        type: "raster-dem",
-        url: "mapbox://mapbox.mapbox-terrain-dem-v1",
-        tileSize: 512,
-        maxzoom: 14,
-      });
-      m.setTerrain({ source: "nav-dem", exaggeration: 0 });
+      m.setTerrain({ source: DEM_SOURCE_ID, exaggeration: 0 });
 
       m.addSource("route", {
         type: "geojson",

@@ -226,8 +226,37 @@ self.addEventListener("message", (event) => {
       const CONCURRENCY = 6; // polite to the tile server
       let cursor = 0;
 
-      const post = (payload) =>
-        self.clients.matchAll().then((cs) => cs.forEach((c) => c.postMessage(payload)));
+      /**
+       * Reply to the page that asked, not to everyone.
+       *
+       * clients.matchAll() only returns clients this worker controls. On the
+       * very first visit the page is still being claimed when the download
+       * starts, so the CACHE_DONE broadcast went nowhere and the caller sat
+       * on its ten-minute safety timeout with every tile already cached —
+       * the button stuck on "Downloading…" forever.
+       *
+       * event.source is the exact client that posted the request, controlled
+       * or not. Keep the broadcast as a fallback for older callers.
+       */
+      const post = (payload) => {
+        if (event.source) {
+          try {
+            event.source.postMessage(payload);
+            return Promise.resolve();
+          } catch {
+            /* fall through to the broadcast */
+          }
+        }
+        // includeUncontrolled is the part that matters. A page is not yet
+        // controlled on the visit that registers the worker, and that is
+        // exactly when someone taps Download. Without this the reply went to
+        // nobody and the caller waited on its safety timeout with every tile
+        // already cached. Each message carries an id, so the page ignores
+        // any that are not its own.
+        return self.clients
+          .matchAll({ includeUncontrolled: true, type: "window" })
+          .then((cs) => cs.forEach((c) => c.postMessage(payload)));
+      };
 
       async function worker() {
         while (cursor < urls.length) {

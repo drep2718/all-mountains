@@ -1,9 +1,15 @@
-// Offline download manager: tells the service worker which map tiles to cache
-// for a trail, and records what's been downloaded so it can be listed/removed.
+/**
+ * Offline download manager.
+ *
+ * The unit of offline is a summit, not a trail: "download Mount Rainier"
+ * takes the peak, every route to its top, the terrain under them, the map,
+ * the photographs and the pages that render it all. The per-trail downloader
+ * this replaced is gone — a trail belongs to a mountain now.
+ */
 
-import { estimateBytes, formatBytes, padBBox, tilesForBBox, tileUrl, type BBox } from "@/lib/tiles";
+import { estimateBytes, formatBytes, tileUrl } from "@/lib/tiles";
 
-const INDEX_KEY = "am.offline.index";
+export { formatBytes };
 
 /**
  * Cache holding downloaded map tiles. Unversioned on purpose so a service
@@ -11,161 +17,6 @@ const INDEX_KEY = "am.offline.index";
  * Must match TILES in public/sw.js.
  */
 export const TILE_CACHE = "am-tiles";
-
-/** Zoom span for a downloaded trail: overview through on-trail detail. */
-export const MIN_Z = 10;
-export const MAX_Z = 14;
-/** Margin around the trail bbox, km — enough to cover an off-route detour. */
-export const PAD_KM = 3;
-
-export interface DownloadedTrail {
-  routeId: number;
-  name: string;
-  bbox: BBox;
-  tileCount: number;
-  bytes: number;
-  downloadedAt: number;
-  /** The trail itself, so the detail view works with no network at all. */
-  payload?: unknown;
-}
-
-export interface DownloadProgress {
-  done: number;
-  total: number;
-  bytes: number;
-}
-
-function readIndex(): DownloadedTrail[] {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(window.localStorage.getItem(INDEX_KEY) || "[]") as DownloadedTrail[];
-  } catch {
-    return [];
-  }
-}
-
-function writeIndex(list: DownloadedTrail[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(INDEX_KEY, JSON.stringify(list));
-  } catch {
-    /* quota — the tiles are still cached, only the index entry is lost */
-  }
-}
-
-export function listDownloads(): DownloadedTrail[] {
-  return readIndex().sort((a, b) => b.downloadedAt - a.downloadedAt);
-}
-
-export function isDownloaded(routeId: number): boolean {
-  return readIndex().some((d) => d.routeId === routeId);
-}
-
-export function getDownload(routeId: number): DownloadedTrail | null {
-  return readIndex().find((d) => d.routeId === routeId) ?? null;
-}
-
-/** Tiles needed for a trail — used for both the estimate and the download. */
-export function planTiles(bbox: BBox) {
-  const padded = padBBox(bbox, PAD_KM);
-  const tiles = tilesForBBox(padded, MIN_Z, MAX_Z);
-  return { padded, tiles, estimatedBytes: estimateBytes(tiles.length) };
-}
-
-export function estimateLabel(bbox: BBox): string {
-  return formatBytes(planTiles(bbox).estimatedBytes);
-}
-
-export async function swReady(): Promise<ServiceWorkerRegistration | null> {
-  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null;
-  try {
-    return await navigator.serviceWorker.ready;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Download a trail for offline use: its map tiles plus its own data.
- * Resolves when every tile has been attempted.
- */
-export async function downloadTrail(
-  route: { id: number; name: string | null },
-  bbox: BBox,
-  token: string,
-  payload: unknown,
-  onProgress?: (p: DownloadProgress) => void
-): Promise<DownloadedTrail> {
-  const reg = await swReady();
-  const { padded, tiles } = planTiles(bbox);
-  const urls = tiles.map((t) => tileUrl(t, token));
-  const id = `dl_${route.id}_${Date.now()}`;
-
-  let bytes = 0;
-
-  if (reg?.active) {
-    await new Promise<void>((resolve) => {
-      const onMessage = (event: MessageEvent) => {
-        const m = event.data;
-        if (!m || m.id !== id) return;
-        if (m.type === "CACHE_PROGRESS") {
-          bytes = m.bytes || bytes;
-          onProgress?.({ done: m.done, total: m.total, bytes });
-        } else if (m.type === "CACHE_DONE") {
-          bytes = m.bytes || bytes;
-          onProgress?.({ done: m.done, total: m.total, bytes });
-          navigator.serviceWorker.removeEventListener("message", onMessage);
-          resolve();
-        }
-      };
-      navigator.serviceWorker.addEventListener("message", onMessage);
-      reg.active!.postMessage({ type: "CACHE_TILES", id, urls });
-
-      // Never hang the UI forever if the SW dies mid-download.
-      setTimeout(() => {
-        navigator.serviceWorker.removeEventListener("message", onMessage);
-        resolve();
-      }, 5 * 60 * 1000);
-    });
-  } else {
-    // No service worker (e.g. dev over plain http) — still fill the Cache API
-    // directly so the tiles are there.
-    const cache = await caches.open(TILE_CACHE);
-    let done = 0;
-    for (const url of urls) {
-      try {
-        const res = await fetch(url, { mode: "cors" });
-        if (res.ok) {
-          bytes += Number(res.headers.get("content-length") || 0);
-          await cache.put(url, res.clone());
-        }
-      } catch {
-        /* skip */
-      }
-      done++;
-      if (done % 5 === 0 || done === urls.length) {
-        onProgress?.({ done, total: urls.length, bytes });
-      }
-    }
-  }
-
-  // Cache the trail's own page too. Without this the map tiles are on the
-  // device but opening the trail offline lands on the "you're offline" page —
-  // which defeats the point of having downloaded it.
-  await cacheTrailPage(route.id);
-
-  const entry: DownloadedTrail = {
-    routeId: route.id,
-    name: route.name || "Unnamed trail",
-    bbox: padded,
-    tileCount: urls.length,
-    bytes: bytes || estimateBytes(urls.length),
-    downloadedAt: Date.now(),
-    payload,
-  };
-  writeIndex([entry, ...readIndex().filter((d) => d.routeId !== route.id)]);
-  return entry;
-}
 
 /**
  * Cache name for pages and app code. MUST match SHELL in public/sw.js —
@@ -175,90 +26,21 @@ export async function downloadTrail(
  */
 export const SHELL_CACHE = "am-shell-v4";
 
-/**
- * Cache the trail's page *and the JavaScript that renders it*.
- *
- * Caching the HTML alone is not enough: the document is a shell that React
- * hydrates, so without its chunks an offline visit renders the nav bar and an
- * endless spinner. The service worker only sees requests made after it takes
- * control, which misses the very first page load, so the assets this page
- * actually used are read from the Performance timeline and cached explicitly.
- */
-async function cacheTrailPage(routeId: number): Promise<void> {
-  if (typeof caches === "undefined") return;
+export interface DownloadProgress {
+  done: number;
+  total: number;
+  bytes: number;
+}
+
+/** The active service worker, or null when there isn't one (e.g. dev). */
+export async function swReady(): Promise<ServiceWorkerRegistration | null> {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null;
   try {
-    const cache = await caches.open(SHELL_CACHE);
-
-    const res = await fetch(`/routes/${routeId}`, { headers: { Accept: "text/html" } });
-    if (res.ok && (res.headers.get("content-type") || "").includes("text/html")) {
-      await cache.put(`/routes/${routeId}`, res.clone());
-    }
-
-    const assets = performance
-      .getEntriesByType("resource")
-      .map((e) => e.name)
-      .filter((u) => {
-        try {
-          const url = new URL(u);
-          return (
-            url.origin === location.origin &&
-            url.pathname.startsWith("/_next/") &&
-            !url.searchParams.has("_rsc")
-          );
-        } catch {
-          return false;
-        }
-      });
-
-    await Promise.all(
-      [...new Set(assets)].map(async (u) => {
-        try {
-          if (await cache.match(u)) return;
-          const r = await fetch(u);
-          if (r.ok) await cache.put(u, r.clone());
-        } catch {
-          /* one missing asset must not fail the download */
-        }
-      })
-    );
+    return await navigator.serviceWorker.ready;
   } catch {
-    /* best effort — tiles and trail data are already saved */
+    return null;
   }
 }
-
-/** Remove a trail's index entry and its cached tiles. */
-export async function removeDownload(routeId: number): Promise<void> {
-  const entry = getDownload(routeId);
-  writeIndex(readIndex().filter((d) => d.routeId !== routeId));
-  if (!entry || typeof caches === "undefined") return;
-
-  // Only delete tiles no other download still needs.
-  const remaining = readIndex();
-  const stillNeeded = new Set<string>();
-  for (const d of remaining) {
-    for (const t of tilesForBBox(d.bbox, MIN_Z, MAX_Z)) {
-      stillNeeded.add(`${t.z}/${t.x}/${t.y}`);
-    }
-  }
-
-  try {
-    const cache = await caches.open(TILE_CACHE);
-    for (const t of tilesForBBox(entry.bbox, MIN_Z, MAX_Z)) {
-      if (stillNeeded.has(`${t.z}/${t.x}/${t.y}`)) continue;
-      for (const req of await cache.keys()) {
-        if (req.url.includes(`/${t.z}/${t.x}/${t.y}`)) await cache.delete(req);
-      }
-    }
-  } catch {
-    /* best effort */
-  }
-}
-
-export function totalDownloadedBytes(): number {
-  return readIndex().reduce((sum, d) => sum + (d.bytes || 0), 0);
-}
-
-export { formatBytes };
 
 // ---------------------------------------------------------------------------
 // Downloading a mountain
@@ -269,9 +51,20 @@ export { formatBytes };
 // ---------------------------------------------------------------------------
 
 import { demTileUrl, planMountainTiles } from "@/lib/tiles";
+import { GLYPH_RANGES, LABEL_FONT, TILE_BYTES, glyphUrl } from "@/lib/mapStyle";
 import { decodeSegments } from "@/lib/polyline";
 
 const PEAK_INDEX_KEY = "am.offline.peaks";
+
+/**
+ * Both styles the app renders, because a download that caches one of them
+ * leaves the other blank on the mountain. Navigation uses the topo style; the
+ * 3-D peak view uses satellite. Caching only the default meant the 3-D view
+ * came up as route lines floating on black once the signal went.
+ */
+const OFFLINE_STYLES = ["outdoors-v12", "satellite-streets-v12"] as const;
+/** Measured, not guessed — see TILE_BYTES in mapStyle.ts. */
+const BYTES_PER_IMAGERY_TILE = TILE_BYTES.satellite + TILE_BYTES.outdoors;
 /** Photos are the user's data like tiles are: unversioned so updates keep them. */
 export const IMAGE_CACHE = "am-images";
 
@@ -337,9 +130,13 @@ export function estimatePeakDownload(input: Pick<PeakDownloadInput, "routePolys"
   const demCount = new Set(
     plan.tiles.map((t) => `${Math.min(t.z, 14)}/${t.x >> Math.max(0, t.z - 14)}/${t.y >> Math.max(0, t.z - 14)}`)
   ).size;
-  const bytes = plan.estimatedBytes + photoBytes + demCount * 18 * 1024;
+  // estimateBytes() assumes a flat 25 KB, which is ~11× too low for @2x
+  // tiles: a measured satellite tile is 323 KB and an outdoors one 248 KB.
+  // Promising 3.4 MB and spending 54.7 MB of someone's mobile data is a bug.
+  const bytes =
+    plan.tiles.length * BYTES_PER_IMAGERY_TILE + photoBytes + demCount * TILE_BYTES.dem;
   return {
-    tileCount: plan.tiles.length + demCount,
+    tileCount: plan.tiles.length * OFFLINE_STYLES.length + demCount,
     byZoom: plan.byZoom,
     bytes,
     label: formatBytes(bytes),
@@ -361,7 +158,13 @@ export async function downloadPeak(
   // Imagery plus the terrain DEM underneath it. Deduplicated because several
   // zoom levels collapse onto the same DEM tile.
   const demUrls = [...new Set(plan.tiles.map((t) => demTileUrl(t, token)))];
-  const urls = [...plan.tiles.map((t) => tileUrl(t, token)), ...demUrls];
+  const urls = [
+    ...plan.tiles.flatMap((t) => OFFLINE_STYLES.map((style) => tileUrl(t, token, style))),
+    ...demUrls,
+    // Without the font, every labelled layer throws on load and takes the
+    // rest of the map setup with it.
+    ...GLYPH_RANGES.map((r) => glyphUrl(LABEL_FONT, r, token)),
+  ];
   const reg = await swReady();
   const id = `dlp_${input.slug}_${Date.now()}`;
 
@@ -384,10 +187,13 @@ export async function downloadPeak(
       };
       navigator.serviceWorker.addEventListener("message", onMessage);
       reg.active!.postMessage({ type: "CACHE_TILES", id, urls });
+      // Safety net only. With the worker replying to event.source this
+      // should never fire; when it did, it stranded the UI for ten minutes
+      // with the download already complete.
       setTimeout(() => {
         navigator.serviceWorker.removeEventListener("message", onMessage);
         resolve();
-      }, 10 * 60 * 1000);
+      }, 4 * 60 * 1000);
     });
   } else {
     const cache = await caches.open(TILE_CACHE);
@@ -462,10 +268,42 @@ async function cachePeakPage(slug: string): Promise<void> {
   if (typeof caches === "undefined") return;
   try {
     const cache = await caches.open(SHELL_CACHE);
-    const res = await fetch(`/peaks/${slug}`, { headers: { Accept: "text/html" } });
-    if (res.ok && (res.headers.get("content-type") || "").includes("text/html")) {
-      await cache.put(`/peaks/${slug}`, res.clone());
+
+    /**
+     * The peak page and the navigation screen.
+     *
+     * /record is the whole point of downloading a mountain — you take it with
+     * you so you can follow the route with no signal. Caching only the peak
+     * page meant tapping Navigate on the trail landed on "You're offline",
+     * which is the one moment the app must not fail. The worker matches
+     * navigations with ignoreSearch, so one copy of /record serves every
+     * ?peak=…&route=… combination.
+     */
+    const htmlAssets = new Set<string>();
+    for (const path of [`/peaks/${slug}`, "/record"]) {
+      const res = await fetch(path, { headers: { Accept: "text/html" } });
+      if (res.ok && (res.headers.get("content-type") || "").includes("text/html")) {
+        const body = await res.clone().text();
+        await cache.put(path, res.clone());
+        // Scripts and stylesheets the document itself references. The
+        // Performance timeline below only sees what *this* page loaded, so
+        // without this /record would be cached as a shell with no code.
+        for (const m of body.matchAll(/(?:src|href)="(\/_next\/[^"]+)"/g)) {
+          htmlAssets.add(m[1]);
+        }
+      }
     }
+
+    /**
+     * Pull in the navigation map's chunk.
+     *
+     * NavMap is a dynamic import, so its chunk is only fetched when /record
+     * actually mounts — which never happens while you are standing on the
+     * peak page pressing Download. Importing it here makes the bundler fetch
+     * it, and the worker caches it on the way past. Without this the
+     * navigation screen opens offline to a permanent loading shimmer.
+     */
+    await import("@/components/NavMap").catch(() => {});
 
     const assets = performance
       .getEntriesByType("resource")
@@ -484,7 +322,7 @@ async function cachePeakPage(slug: string): Promise<void> {
       });
 
     await Promise.all(
-      [...new Set(assets)].map(async (u) => {
+      [...new Set([...assets, ...htmlAssets])].map(async (u) => {
         try {
           if (await cache.match(u)) return;
           const r = await fetch(u);
