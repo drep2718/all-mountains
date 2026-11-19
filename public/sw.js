@@ -26,7 +26,7 @@ const KEEP = [SHELL, TILES, IMAGES, DATA];
 
 // Kept small on purpose: precaching a hashed Next.js build from a static list
 // goes stale instantly. The shell fills in at runtime instead.
-const SHELL_URLS = ["/", "/offline", "/routes", "/peaks", "/downloads"];
+const SHELL_URLS = ["/", "/offline", "/routes", "/peaks", "/downloads", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -135,7 +135,11 @@ async function navigationFirst(request, cacheName) {
   }
 }
 
-/** Network-first with cache fallback: fresh when online, still works offline. */
+/**
+ * Database query parameters are part of the data identity. Ignoring search
+ * here returned a partial nearby-peaks array for a single full peak lookup,
+ * overwrote the offline payload and crashed on peak.elevation_m.
+ */
 async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   try {
@@ -143,7 +147,7 @@ async function networkFirst(request, cacheName) {
     if (res && res.ok) cache.put(request, res.clone());
     return res;
   } catch (err) {
-    const hit = await cache.match(request, { ignoreVary: true, ignoreSearch: true });
+    const hit = await cache.match(request);
     if (hit) return hit;
     throw err;
   }
@@ -180,6 +184,14 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // A download explicitly refreshes the HTML it is about to save. Serving
+  // an old shell here gives it chunk URLs from a previous deployment (404s).
+  // Full document reloads still use navigationFirst and work offline.
+  if (url.origin === self.location.origin && request.mode !== "navigate" && request.cache === "reload") {
+    event.respondWith(fetch(request));
+    return;
+  }
+
   // Same-origin: navigations fall back to the offline page.
   if (url.origin === self.location.origin) {
     // RSC payloads are data for an already-loaded page. Never cache or serve
@@ -212,6 +224,17 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
+// Reply before and after client control, and await fallback delivery before
+// waitUntil releases the worker.
+async function replyToDownload(event, payload) {
+  if (event.ports?.[0]) { event.ports[0].postMessage(payload); return; }
+  if (event.source) {
+    try { event.source.postMessage(payload); return; } catch { /* broadcast below */ }
+  }
+  const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
+  clients.forEach((client) => client.postMessage(payload));
+}
+
 // The page asks the SW to prefetch a trail's tiles, and gets progress back.
 self.addEventListener("message", (event) => {
   const msg = event.data;
@@ -223,6 +246,7 @@ self.addEventListener("message", (event) => {
       const urls = msg.urls || [];
       let done = 0;
       let bytes = 0;
+      let failed = 0;
       const CONCURRENCY = 6; // polite to the tile server
       let cursor = 0;
 
@@ -238,25 +262,7 @@ self.addEventListener("message", (event) => {
        * event.source is the exact client that posted the request, controlled
        * or not. Keep the broadcast as a fallback for older callers.
        */
-      const post = (payload) => {
-        if (event.source) {
-          try {
-            event.source.postMessage(payload);
-            return Promise.resolve();
-          } catch {
-            /* fall through to the broadcast */
-          }
-        }
-        // includeUncontrolled is the part that matters. A page is not yet
-        // controlled on the visit that registers the worker, and that is
-        // exactly when someone taps Download. Without this the reply went to
-        // nobody and the caller waited on its safety timeout with every tile
-        // already cached. Each message carries an id, so the page ignores
-        // any that are not its own.
-        return self.clients
-          .matchAll({ includeUncontrolled: true, type: "window" })
-          .then((cs) => cs.forEach((c) => c.postMessage(payload)));
-      };
+      const post = (payload) => replyToDownload(event, payload);
 
       async function worker() {
         while (cursor < urls.length) {
@@ -264,26 +270,29 @@ self.addEventListener("message", (event) => {
           try {
             const existing = await cache.match(url);
             if (existing) {
-              bytes += Number(existing.headers.get("content-length") || 0);
+              const size = (await existing.clone().arrayBuffer()).byteLength;
+              bytes += size;
             } else {
               const res = await fetch(url, { mode: "cors" });
               if (res && res.ok) {
-                bytes += Number(res.headers.get("content-length") || 0);
-                await cache.put(url, res.clone());
-              }
+                const size = (await res.clone().arrayBuffer()).byteLength;
+                bytes += size;
+                await cache.put(url, res);
+              } else { failed++; }
             }
-          } catch {
-            /* a missing tile must not abort the download */
-          }
+          } catch { failed++; }
           done++;
           if (done % 5 === 0 || done === urls.length) {
-            post({ type: "CACHE_PROGRESS", id: msg.id, done, total: urls.length, bytes });
+            await post({ type: "CACHE_PROGRESS", id: msg.id, done, total: urls.length, bytes, failed });
           }
         }
       }
 
       await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-      post({ type: "CACHE_DONE", id: msg.id, done, total: urls.length, bytes });
-    })()
+      await post({ type: failed ? "CACHE_ERROR" : "CACHE_DONE", id: msg.id, done, total: urls.length, bytes, failed });
+    })().catch(() => replyToDownload(event, {
+      type: "CACHE_ERROR", id: msg.id, done: 0,
+      total: msg.urls?.length || 0, bytes: 0, failed: 1,
+    }))
   );
 });

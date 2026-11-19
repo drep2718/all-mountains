@@ -158,3 +158,9 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Keep Explore controls below its search overlay. Mapbox CSS is unlayered,
+   so this scoped unlayered rule takes precedence over its default top: 0. */
+.explore-map .mapboxgl-ctrl-top-right {
+  top: 4.5rem;
+}

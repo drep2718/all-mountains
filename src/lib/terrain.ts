@@ -67,7 +67,8 @@ export function resample(line: LngLat[], stepM = 25, maxPoints = 400): LngLat[] 
   }
   if (total === 0) return [line[0]];
 
-  const step = Math.max(stepM, total / maxPoints);
+  const budget = Math.max(2, Math.floor(maxPoints));
+  const step = Math.max(stepM, total / (budget - 1));
   const out: LngLat[] = [line[0]];
   let target = step;
   let walked = 0;
@@ -75,7 +76,7 @@ export function resample(line: LngLat[], stepM = 25, maxPoints = 400): LngLat[] 
   for (let i = 0; i < segLen.length; i++) {
     const segStart = walked;
     const segEnd = walked + segLen[i];
-    while (target <= segEnd && segLen[i] > 0) {
+    while (target < total - 1e-6 && target <= segEnd && segLen[i] > 0 && out.length < budget - 1) {
       const t = (target - segStart) / segLen[i];
       out.push([
         line[i][0] + (line[i + 1][0] - line[i][0]) * t,
@@ -141,7 +142,7 @@ export function profileFromTerrain(
   const raw: number[] = [];
   for (const [lng, lat] of pts) {
     const e = map.queryTerrainElevation({ lng, lat }, { exaggerated: false });
-    if (e == null) return null; // tile not loaded yet — caller retries
+    if (e == null || !Number.isFinite(e)) return null; // tile not loaded yet — caller retries
     raw.push(e);
   }
   const ele = denoise(raw);

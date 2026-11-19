@@ -30,9 +30,13 @@ export interface ListItem {
 
 export async function fetchMyLists(): Promise<PeakList[]> {
   const supabase = createClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+  if (!user) throw new Error("Sign in to view your lists.");
   const { data, error } = await supabase
     .from("peak_lists")
     .select("*, list_items(count)")
+    .eq("user_id", user.id)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map((l: PeakList & { list_items?: { count: number }[] }) => ({
@@ -93,11 +97,12 @@ export async function removeItem(listId: number, peakSlug: string): Promise<void
 }
 
 export async function fetchList(listId: number): Promise<PeakList | null> {
-  const { data } = await createClient()
+  const { data, error } = await createClient()
     .from("peak_lists")
     .select("*")
     .eq("id", listId)
-    .single();
+    .maybeSingle();
+  if (error) throw error;
   return (data as PeakList) ?? null;
 }
 

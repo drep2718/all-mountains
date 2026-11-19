@@ -10,17 +10,10 @@ import LocationSearch from "@/components/LocationSearch";
 import type { Peak, PeakRoute as Route } from "@/lib/peak-types";
 import { DIFFICULTY_LABEL, difficultyClasses } from "@/lib/peak-types";
 import { type Filters, DEFAULT_FILTERS, routeMatches, activeFilterCount } from "@/lib/filters";
+import { fetchExploreBounds } from "@/lib/explore";
 import type { GeocodeResult } from "@/lib/geocode";
 
 const supabase = createClient();
-
-function minElevationForZoom(zoom: number): number {
-  if (zoom < 5) return 3000;
-  if (zoom < 7) return 2000;
-  if (zoom < 9) return 1000;
-  if (zoom < 11) return 400;
-  return 0;
-}
 
 function ExploreInner() {
   const searchParams = useSearchParams();
@@ -31,6 +24,11 @@ function ExploreInner() {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [initialCenter] = useState<[number, number]>([39.63, -106.37]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [focusError, setFocusError] = useState<string | null>(null);
+  const lastBounds = useRef<Bounds | null>(null);
+  const request = useRef<AbortController | null>(null);
+  const requestVersion = useRef(0);
   const [activeRoute, setActiveRoute] = useState<Route | null>(null);
   const [focusBounds, setFocusBounds] = useState<[number, number, number, number] | null>(null);
   const [isolating, setIsolating] = useState(false);
@@ -51,32 +49,40 @@ function ExploreInner() {
   }
 
   useEffect(() => {
-    if (!focusRouteId) return;
+    if (!focusRouteId && !focusPeakId) return;
+    let cancelled = false;
+    const controller = new AbortController();
     (async () => {
-      const { data } = await supabase.from("routes").select("*").eq("id", focusRouteId).single();
-      if (data) {
-        const r = data as Route;
-        setIsolating(true);
-        setActiveRoute(r);
-        setRoutes([r]);
-        setFocusBounds([r.bbox_min_lng, r.bbox_min_lat, r.bbox_max_lng, r.bbox_max_lat]);
-        setTab("routes");
+      setFocusError(null);
+      try {
+        if (focusRouteId) {
+          const routeId = Number(focusRouteId);
+          if (!Number.isSafeInteger(routeId) || routeId <= 0) throw new Error("Route not found.");
+          const { data, error } = await supabase.from("routes").select("*").eq("id", routeId).abortSignal(controller.signal).maybeSingle();
+          if (error) throw new Error(`Couldn't load this route: ${error.message}`);
+          if (!data) throw new Error("Route not found.");
+          if (cancelled) return;
+          const r = data as Route;
+          setIsolating(true);
+          setActiveRoute(r);
+          setRoutes([r]);
+          setFocusBounds([r.bbox_min_lng, r.bbox_min_lat, r.bbox_max_lng, r.bbox_max_lat]);
+          setTab("routes");
+        } else {
+          const { data, error } = await supabase.from("peaks").select("*").eq("slug", focusPeakId!).abortSignal(controller.signal).maybeSingle();
+          if (error) throw new Error(`Couldn't load this peak: ${error.message}`);
+          if (!data) throw new Error("Peak not found.");
+          if (cancelled) return;
+          const p = data as Peak;
+          setFocusBounds([p.longitude - 0.06, p.latitude - 0.06, p.longitude + 0.06, p.latitude + 0.06]);
+          setTab("peaks");
+        }
+      } catch (e) {
+        if (!cancelled) setFocusError(e instanceof Error ? e.message : "Couldn't load this location.");
       }
     })();
-  }, [focusRouteId]);
-
-  // Fly to a single peak when arriving from a peak page (?peak=id)
-  useEffect(() => {
-    if (!focusPeakId) return;
-    (async () => {
-      const { data } = await supabase.from("peaks").select("*").eq("slug", focusPeakId).single();
-      if (data) {
-        const p = data as Peak;
-        setFocusBounds([p.longitude - 0.06, p.latitude - 0.06, p.longitude + 0.06, p.latitude + 0.06]);
-        setTab("peaks");
-      }
-    })();
-  }, [focusPeakId]);
+    return () => { cancelled = true; controller.abort(); };
+  }, [focusRouteId, focusPeakId]);
 
   // Stable guard — true whenever a ?route= param is present, so an in-flight
   // viewport fetch can never clobber the isolated route. Written in an effect,
@@ -85,27 +91,39 @@ function ExploreInner() {
   useEffect(() => { isolatingRef.current = !!focusRouteId; }, [focusRouteId]);
 
   const handleBoundsChange = useCallback((b: Bounds) => {
+    lastBounds.current = b;
     if (timer.current) clearTimeout(timer.current);
+    request.current?.abort();
+    const version = ++requestVersion.current;
     timer.current = setTimeout(async () => {
+      const controller = new AbortController();
+      request.current = controller;
       setLoading(true);
-      const [peakRes, routeRes] = await Promise.all([
-        supabase.rpc("peaks_in_bounds", {
-          min_lat: b.minLat, min_lng: b.minLng, max_lat: b.maxLat, max_lng: b.maxLng,
-          min_elevation: minElevationForZoom(b.zoom), lim: 400,
-        }),
-        b.zoom >= 6 && !isolatingRef.current
-          ? supabase.rpc("routes_in_bounds", {
-              min_lat: b.minLat, min_lng: b.minLng, max_lat: b.maxLat, max_lng: b.maxLng, lim: 100,
-            })
-          : Promise.resolve({ data: null, error: null }),
-      ]);
-      if (!peakRes.error && peakRes.data) setPeaks(peakRes.data as Peak[]);
-      if (!isolatingRef.current && !routeRes.error && routeRes.data) setRoutes(routeRes.data as Route[]);
-      setLoading(false);
+      setError(null);
+      try {
+        const result = await fetchExploreBounds(b, !isolatingRef.current, controller.signal);
+        if (controller.signal.aborted || version !== requestVersion.current) return;
+        setPeaks(result.peaks);
+        if (!isolatingRef.current) setRoutes(result.routes);
+      } catch (e) {
+        if (!controller.signal.aborted && version === requestVersion.current) {
+          setError(e instanceof Error ? e.message : "Couldn't load this area. Check your connection.");
+        }
+      } finally {
+        if (version === requestVersion.current) setLoading(false);
+      }
     }, 400);
   }, []);
 
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+    request.current?.abort();
+  }, []);
+
+  // Leaving an isolated route must reload the viewport even if the map did not move.
+  useEffect(() => {
+    if (!focusRouteId && lastBounds.current) handleBoundsChange(lastBounds.current);
+  }, [focusRouteId, handleBoundsChange]);
 
   const jumpToPlace = (place: GeocodeResult | null) => {
     if (place?.bbox) setFocusBounds(place.bbox);
@@ -121,8 +139,8 @@ function ExploreInner() {
   }, [peaks, filters.difficulty, filters.iconicOnly]);
 
   const shownRoutes = useMemo(() =>
-    isolating ? routes : routes.filter((r) => routeMatches(r, filters)),
-    [routes, filters, isolating]);
+    isolating ? routes : routes.filter((r) => routeMatches(r, filters, peaks.find((p) => p.slug === r.peak_slug))),
+    [routes, filters, isolating, peaks]);
 
   const nFilters = activeFilterCount(filters);
   const list = tab === "peaks" ? shownPeaks : shownRoutes;
@@ -149,7 +167,7 @@ function ExploreInner() {
         <div className="w-full max-w-xs">
           <LocationSearch selected={null} onSelect={jumpToPlace} placeholder="Search a mountain or place..." />
         </div>
-        <button onClick={() => setFilterOpen(true)}
+        <button aria-label="Filters" onClick={() => setFilterOpen(true)}
           className="flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-border bg-ground/90 px-3 py-2.5 text-sm font-medium text-ink backdrop-blur transition-colors hover:bg-surface">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
@@ -171,6 +189,14 @@ function ExploreInner() {
         </button>
       </div>
 
+      {(error || focusError) && (
+        <div role="alert" className="absolute inset-x-3 top-28 z-20 rounded-xl border border-diff-extreme/40 bg-surface p-3 text-sm text-diff-extreme sm:top-32">
+          <p>{focusError || error}</p>
+          {error && <button className="mt-2 font-semibold underline" onClick={() => lastBounds.current && handleBoundsChange(lastBounds.current)}>Retry loading this area</button>}
+          {focusError && <Link className="mt-2 inline-block font-semibold underline" href="/explore">Browse the map</Link>}
+        </div>
+      )}
+
       {/* Isolated route banner */}
       {isolating && activeRoute && (
         <div className="absolute left-1/2 top-16 z-10 flex -translate-x-1/2 items-center gap-3 rounded-full border border-trail-500/40 bg-ground/90 px-4 py-2 text-sm backdrop-blur">
@@ -181,7 +207,7 @@ function ExploreInner() {
       )}
 
       {/* Status pill */}
-      <div className="pointer-events-none absolute left-3 bottom-20 z-10 flex items-center gap-2 rounded-full border border-border bg-ground/85 px-3.5 py-1.5 text-sm font-medium text-ink backdrop-blur sm:bottom-4">
+      <div className="pointer-events-none absolute left-3 bottom-36 z-10 flex items-center gap-2 rounded-full border border-border bg-ground/85 px-3.5 py-1.5 text-sm font-medium text-ink backdrop-blur sm:bottom-4">
         {loading ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-border-bright border-t-pine-400" />
                  : <span className="h-2 w-2 rounded-full bg-pine-400" />}
         <span className="font-display">{shownPeaks.length}</span> peaks
@@ -190,7 +216,7 @@ function ExploreInner() {
 
       {/* Sheet toggle */}
       <button onClick={() => setSheetOpen((s) => !s)}
-        className="absolute bottom-20 left-1/2 z-20 -translate-x-1/2 rounded-full border border-border bg-ground/90 px-5 py-2.5 text-sm font-semibold text-ink shadow-xl backdrop-blur transition-colors hover:bg-surface sm:bottom-4">
+        className="absolute bottom-20 left-1/2 whitespace-nowrap z-20 -translate-x-1/2 rounded-full border border-border bg-ground/90 px-5 py-2.5 text-sm font-semibold text-ink shadow-xl backdrop-blur transition-colors hover:bg-surface sm:bottom-4">
         {sheetOpen ? "Hide list" : `Browse ${shownPeaks.length} peaks · ${shownRoutes.length} routes`}
       </button>
 
@@ -201,7 +227,7 @@ function ExploreInner() {
             <button onClick={() => setTab("peaks")} className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${tab === "peaks" ? "bg-pine-600 text-white" : "text-ink-muted"}`}>Peaks {shownPeaks.length}</button>
             <button onClick={() => setTab("routes")} className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${tab === "routes" ? "bg-trail-600 text-white" : "text-ink-muted"}`}>Routes {shownRoutes.length}</button>
           </div>
-          <button onClick={() => setSheetOpen(false)} className="rounded-full p-2 text-ink-muted hover:bg-surface">
+          <button aria-label="Close list" onClick={() => setSheetOpen(false)} className="rounded-full p-2 text-ink-muted hover:bg-surface">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>

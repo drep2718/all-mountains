@@ -4,7 +4,7 @@ import {
   type Filters, DIFFICULTIES, ROUTE_TYPES, ACTIVITIES, FEATURES,
   LENGTH_CAP, toggle, activeFilterCount, DEFAULT_FILTERS,
 } from "@/lib/filters";
-import { DIFFICULTY_HEX, DIFFICULTY_LABEL, type PeakDifficulty } from "@/lib/peak-types";
+import { DIFFICULTY_HEX, DIFFICULTY_LABEL } from "@/lib/peak-types";
 
 interface Props {
   open: boolean;
@@ -47,8 +47,8 @@ export default function FilterSheet({ open, filters, onChange, onClose, resultCo
             <div className="flex items-center gap-3">
               <span className="text-xl">🥇</span>
               <div>
-                <div className="font-semibold text-ink">Iconic summits only</div>
-                <div className="text-xs text-ink-muted">The 100 most famous peaks across your regions</div>
+                <div className="font-semibold text-ink">Highpoints only</div>
+                <div className="text-xs text-ink-muted">National and regional highpoints</div>
               </div>
             </div>
             <span className={`flex h-6 w-11 items-center rounded-full p-0.5 transition-colors ${filters.iconicOnly ? "bg-[#e8b33a]" : "bg-surface-3"}`}>

@@ -31,7 +31,7 @@ export interface PeakHit {
 export async function searchPeaksByName(query: string, limit = 6): Promise<PeakHit[]> {
   const q = query.trim();
   if (!q) return [];
-  const { data } = await createClient()
+  const { data, error } = await createClient()
     .from("peaks")
     .select("slug,name,latitude,longitude,elevation_m")
     .ilike("name", `%${q}%`)
@@ -39,6 +39,7 @@ export async function searchPeaksByName(query: string, limit = 6): Promise<PeakH
     .order("prominence_m", { ascending: false, nullsFirst: false })
     .order("elevation_m", { ascending: false })
     .limit(limit);
+  if (error) throw new Error(`Couldn't search peaks: ${error.message}`);
   return (data ?? []) as PeakHit[];
 }
 
@@ -64,8 +65,10 @@ export async function searchAll(query: string, limit = 24): Promise<SearchResult
       .order("prominence_m", { ascending: false, nullsFirst: false })
       .order("elevation_m", { ascending: false })
       .limit(limit),
-    geocode(q),
+    geocode(q).catch(() => []),
   ]);
+
+  if (byName.error) throw new Error(`Couldn't search peaks: ${byName.error.message}`);
 
   const peaks = (byName.data ?? []) as Peak[];
   const seen = new Set(peaks.map((p) => p.slug));
@@ -91,6 +94,9 @@ export async function searchAll(query: string, limit = 24): Promise<SearchResult
           .limit(60);
       })
     );
+
+    const failed = sets.find((result) => result.error);
+    if (failed?.error) throw new Error(`Couldn't search this area: ${failed.error.message}`);
 
     let bestIdx = 0;
     let bestScore = -1;
@@ -118,7 +124,7 @@ export async function searchAll(query: string, limit = 24): Promise<SearchResult
   // Routes for whatever peaks we found. One query, no join table.
   let routes: PeakRoute[] = [];
   if (peaks.length) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("routes")
       .select("*")
       .in(
@@ -128,6 +134,7 @@ export async function searchAll(query: string, limit = 24): Promise<SearchResult
       .order("is_summit_route", { ascending: false })
       .order("distance_to_summit_m")
       .limit(limit * 2);
+    if (error) throw new Error(`Couldn't search routes: ${error.message}`);
     routes = (data ?? []) as PeakRoute[];
   }
 

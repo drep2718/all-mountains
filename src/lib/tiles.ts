@@ -80,7 +80,7 @@ export function formatBytes(bytes: number): string {
  * rendering simple: the tile is a finished image, no style engine required.
  */
 export function tileUrl(t: Tile, token: string, style = "outdoors-v12"): string {
-  return `https://api.mapbox.com/styles/v1/mapbox/${style}/tiles/512/${t.z}/${t.x}/${t.y}@2x?access_token=${token}`;
+  return `https://api.mapbox.com/styles/v1/mapbox/${style}/tiles/512/${t.z}/${t.x}/${t.y}?access_token=${token}`;
 }
 
 /**

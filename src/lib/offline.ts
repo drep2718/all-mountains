@@ -7,7 +7,7 @@
  * this replaced is gone — a trail belongs to a mountain now.
  */
 
-import { estimateBytes, formatBytes, tileUrl } from "@/lib/tiles";
+import { formatBytes, tileUrl } from "@/lib/tiles";
 
 export { formatBytes };
 
@@ -36,7 +36,18 @@ export interface DownloadProgress {
 export async function swReady(): Promise<ServiceWorkerRegistration | null> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null;
   try {
-    return await navigator.serviceWorker.ready;
+    // ready never resolves in development, where registration is disabled.
+    // A first production visit may still be installing; bound that wait too.
+    const registration = await navigator.serviceWorker.getRegistration();
+    if (!registration) return null;
+    if (registration.active) return registration;
+    let timer: ReturnType<typeof setTimeout>;
+    try {
+      return await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 10000); }),
+      ]);
+    } finally { clearTimeout(timer!); }
   } catch {
     return null;
   }
@@ -94,7 +105,7 @@ function writePeakIndex(list: DownloadedPeak[]): void {
   try {
     window.localStorage.setItem(PEAK_INDEX_KEY, JSON.stringify(list));
   } catch {
-    /* quota — tiles and images are still cached, only the index entry is lost */
+    throw new Error("Couldn't save the download index. Free some device storage and retry.");
   }
 }
 
@@ -124,29 +135,29 @@ export interface PeakDownloadInput {
 export function estimatePeakDownload(input: Pick<PeakDownloadInput, "routePolys" | "latitude" | "longitude" | "photoUrls">) {
   const lines = input.routePolys.flatMap((p) => decodeSegments(p));
   const plan = planMountainTiles(lines, { lat: input.latitude, lng: input.longitude });
-  // Commons thumbnails at 1600px run ~250 KB; close enough to warn on.
-  const photoBytes = input.photoUrls.length * 250 * 1024;
+  // The seven Whitney photos measured 6.0 MB in total, not 250 KB each.
+  // Photo sizes vary; this is a conservative estimate, actual bytes are recorded.
+  const photoBytes = input.photoUrls.length * 900 * 1024;
   // The DEM collapses to zoom 14, so it is far fewer tiles than the imagery.
   const demCount = new Set(
     plan.tiles.map((t) => `${Math.min(t.z, 14)}/${t.x >> Math.max(0, t.z - 14)}/${t.y >> Math.max(0, t.z - 14)}`)
   ).size;
-  // estimateBytes() assumes a flat 25 KB, which is ~11× too low for @2x
-  // tiles: a measured satellite tile is 323 KB and an outdoors one 248 KB.
-  // Promising 3.4 MB and spending 54.7 MB of someone's mobile data is a bug.
+  // Use measured sizes for both imagery styles and the lossless DEM.
+  // A flat 25 KB per tile badly underestimates a real mountain download.
   const bytes =
-    plan.tiles.length * BYTES_PER_IMAGERY_TILE + photoBytes + demCount * TILE_BYTES.dem;
+    plan.tiles.length * BYTES_PER_IMAGERY_TILE + photoBytes + demCount * TILE_BYTES.dem + GLYPH_RANGES.length * 73 * 1024;
   return {
-    tileCount: plan.tiles.length * OFFLINE_STYLES.length + demCount,
+    tileCount: plan.tiles.length * OFFLINE_STYLES.length + demCount + GLYPH_RANGES.length,
     byZoom: plan.byZoom,
     bytes,
-    label: formatBytes(bytes),
+    label: `~${formatBytes(bytes)}`,
   };
 }
 
 /**
  * Download everything needed to use this mountain with no signal.
- * Resolves when every asset has been attempted; one missing photo never fails
- * the download.
+ * Resolves after required map assets and pages are cached. Optional missing
+ * photographs are skipped; incomplete maps must never be labelled available.
  */
 export async function downloadPeak(
   input: PeakDownloadInput,
@@ -172,47 +183,53 @@ export async function downloadPeak(
 
   // --- map tiles ---
   if (reg?.active) {
-    await new Promise<void>((resolve) => {
+    await new Promise<void>((resolve, reject) => {
+      const channel = new MessageChannel();
+      const cleanup = () => {
+        clearTimeout(timeout);
+        channel.port1.close();
+        navigator.serviceWorker.removeEventListener("message", onMessage);
+      };
       const onMessage = (event: MessageEvent) => {
         const m = event.data;
         if (!m || m.id !== id) return;
-        if (m.type === "CACHE_PROGRESS" || m.type === "CACHE_DONE") {
-          bytes = m.bytes || bytes;
+        if (m.type === "CACHE_PROGRESS" || m.type === "CACHE_DONE" || m.type === "CACHE_ERROR") {
+          bytes = m.bytes ?? bytes;
           onProgress?.({ done: m.done, total: m.total, bytes, stage: "map" });
         }
-        if (m.type === "CACHE_DONE") {
-          navigator.serviceWorker.removeEventListener("message", onMessage);
-          resolve();
+        if (m.type === "CACHE_DONE" || m.type === "CACHE_ERROR") {
+          cleanup();
+          if (m.type === "CACHE_ERROR" || m.failed > 0) reject(new Error("Some map tiles couldn't be saved. Check your connection and retry."));
+          else resolve();
         }
       };
+      channel.port1.onmessage = onMessage;
+      // Listen to old workers too, during a deployment transition.
       navigator.serviceWorker.addEventListener("message", onMessage);
-      reg.active!.postMessage({ type: "CACHE_TILES", id, urls });
-      // Safety net only. With the worker replying to event.source this
-      // should never fire; when it did, it stranded the UI for ten minutes
-      // with the download already complete.
-      setTimeout(() => {
-        navigator.serviceWorker.removeEventListener("message", onMessage);
-        resolve();
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error("The map download timed out. Check your connection and retry."));
       }, 4 * 60 * 1000);
+      try { reg.active!.postMessage({ type: "CACHE_TILES", id, urls }, [channel.port2]); }
+      catch (e) { cleanup(); reject(e); }
     });
   } else {
     const cache = await caches.open(TILE_CACHE);
     let done = 0;
+    let failed = 0;
     for (const url of urls) {
       try {
-        const res = await fetch(url, { mode: "cors" });
-        if (res.ok) {
-          bytes += Number(res.headers.get("content-length") || 0);
-          await cache.put(url, res.clone());
-        }
-      } catch {
-        /* a missing tile is a blank square, not a failed download */
-      }
+        const res = (await cache.match(url)) ?? (await fetch(url, { mode: "cors" }));
+        if (!res.ok) throw new Error("Map tile unavailable");
+        bytes += (await res.clone().arrayBuffer()).byteLength;
+        await cache.put(url, res);
+      } catch { failed++; }
       done++;
       if (done % 10 === 0 || done === urls.length) {
         onProgress?.({ done, total: urls.length, bytes, stage: "map" });
       }
     }
+    if (failed) throw new Error("Some map tiles couldn't be saved. Check your connection and retry.");
   }
 
   // --- photographs ---
@@ -222,14 +239,13 @@ export async function downloadPeak(
     let done = 0;
     for (const url of input.photoUrls) {
       try {
-        if (!(await imgCache.match(url))) {
-          const res = await fetch(url, { mode: "cors" });
-          if (res.ok) {
-            bytes += Number(res.headers.get("content-length") || 0);
-            await imgCache.put(url, res.clone());
-          }
+        const existing = await imgCache.match(url);
+        const res = existing ?? await fetch(url, { mode: "cors" });
+        if (res.ok) {
+          bytes += (await res.clone().arrayBuffer()).byteLength;
+          if (!existing) await imgCache.put(url, res);
+          photoCount++;
         }
-        photoCount++;
       } catch {
         /* skip */
       }
@@ -247,7 +263,7 @@ export async function downloadPeak(
     tileCount: urls.length,
     photoCount,
     routeCount: input.routePolys.length,
-    bytes: bytes || estimateBytes(urls.length),
+    bytes,
     downloadedAt: Date.now(),
     payload: input.payload,
   };
@@ -280,8 +296,8 @@ async function cachePeakPage(slug: string): Promise<void> {
      * ?peak=…&route=… combination.
      */
     const htmlAssets = new Set<string>();
-    for (const path of [`/peaks/${slug}`, "/record"]) {
-      const res = await fetch(path, { headers: { Accept: "text/html" } });
+    for (const path of [`/peaks/${slug}`, "/record", "/downloads", "/activities"]) {
+      const res = await fetch(path, { cache: "reload", headers: { Accept: "text/html" } });
       if (res.ok && (res.headers.get("content-type") || "").includes("text/html")) {
         const body = await res.clone().text();
         await cache.put(path, res.clone());
@@ -291,7 +307,7 @@ async function cachePeakPage(slug: string): Promise<void> {
         for (const m of body.matchAll(/(?:src|href)="(\/_next\/[^"]+)"/g)) {
           htmlAssets.add(m[1]);
         }
-      }
+      } else { throw new Error("Offline page unavailable"); }
     }
 
     /**
@@ -303,10 +319,12 @@ async function cachePeakPage(slug: string): Promise<void> {
      * it, and the worker caches it on the way past. Without this the
      * navigation screen opens offline to a permanent loading shimmer.
      */
-    await import("@/components/NavMap").catch(() => {});
+    await import("@/components/NavMap");
 
     const assets = performance
       .getEntriesByType("resource")
+      // A prior failed chunk request is not app code that needs saving.
+      .filter((e) => !((e as PerformanceResourceTiming).responseStatus >= 400))
       .map((e) => e.name)
       .filter((u) => {
         try {
@@ -326,14 +344,13 @@ async function cachePeakPage(slug: string): Promise<void> {
         try {
           if (await cache.match(u)) return;
           const r = await fetch(u);
-          if (r.ok) await cache.put(u, r.clone());
-        } catch {
-          /* one missing asset must not fail the download */
-        }
+          if (!r.ok) throw new Error("Offline code unavailable");
+          await cache.put(u, r.clone());
+        } catch { throw new Error("Couldn't save offline app code"); }
       })
     );
   } catch {
-    /* best effort — tiles, photos and payload are already saved */
+    throw new Error("Couldn't save the offline pages. Check your connection and retry.");
   }
 }
 

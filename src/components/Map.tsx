@@ -378,5 +378,5 @@ export default function Map({
     ]);
   }, [activeRouteId, ready]);
 
-  return <div ref={mapContainer} className="h-full w-full" />;
+  return <div ref={mapContainer} className="explore-map h-full w-full" />;
 }

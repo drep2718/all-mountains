@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/peak-types";
@@ -15,75 +15,68 @@ export default function ProfilePage() {
   const [radiusKm, setRadiusKm] = useState(100);
   const [message, setMessage] = useState("");
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
+  const [loadError, setLoadError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    async function fetch() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
-      // Query the profile for the logged-in user.
-      // RLS ensures they can only see/edit their own.
-      const { data } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-
-      if (data) {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setLoadError(false);
+      try {
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (cancelled) return;
+        if (authError && authError.name !== "AuthSessionMissingError") throw authError;
+        if (!user) { router.replace("/login"); return; }
+        const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+        if (error) throw error;
+        if (cancelled) return;
         const p = data as Profile;
         setProfile(p);
         setDisplayName(p.display_name || "");
         setUsername(p.username || "");
         setBio(p.bio || "");
-        setRadiusKm(p.search_radius_km || 100);
+        setRadiusKm(p.search_radius_km ?? 100);
+      } catch {
+        if (!cancelled) setLoadError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
-    }
-    fetch();
-  }, []);
+    })();
+    return () => { cancelled = true; };
+  }, [supabase, router, attempt]);
 
   const handleSave = async () => {
     if (!profile) return;
     setSaving(true);
     setMessage("");
-
-    // Update profile — RLS policy "Users can update own profile"
-    // ensures only auth.uid() = id can update
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        display_name: displayName,
-        username: username || null,
-        bio: bio || null,
-        search_radius_km: radiusKm,
+    try {
+      const { data, error } = await supabase.from("profiles").update({
+        display_name: displayName.trim(), username: username.trim() || null,
+        bio: bio.trim() || null, search_radius_km: radiusKm,
         updated_at: new Date().toISOString(),
-      })
-      .eq("id", profile.id);
-
-    if (error) {
-      setMessage(`Error: ${error.message}`);
-    } else {
+      }).eq("id", profile.id).select().single();
+      if (error) throw error;
+      setProfile(data as Profile);
       setMessage("Profile saved!");
-    }
-    setSaving(false);
+    } catch (e) {
+      setMessage(`Error: ${e instanceof Error ? e.message : "Couldn’t save your profile. Please try again."}`);
+    } finally { setSaving(false); }
   };
 
   const handleSetHomeLocation = () => {
-    if (!navigator.geolocation || !profile) return;
+    if (!navigator.geolocation || !profile) { setMessage("Error: Location isn't available on this device."); return; }
     navigator.geolocation.getCurrentPosition(async (pos) => {
-      await supabase
-        .from("profiles")
-        .update({
-          home_latitude: pos.coords.latitude,
-          home_longitude: pos.coords.longitude,
-        })
-        .eq("id", profile.id);
-      setMessage("Home location set!");
-    });
+      try {
+        const { data, error } = await supabase.from("profiles").update({
+          home_latitude: pos.coords.latitude, home_longitude: pos.coords.longitude,
+        }).eq("id", profile.id).select().single();
+        if (error) throw error;
+        setProfile(data as Profile);
+        setMessage("Home location set!");
+      } catch { setMessage("Error: Couldn’t save your home location. Please try again."); }
+    }, () => setMessage("Error: Couldn’t access your location. Check location permissions."), { timeout: 15000 });
   };
 
   if (loading) {
@@ -94,6 +87,12 @@ export default function ProfilePage() {
     );
   }
 
+  if (loadError) return (
+    <div role="alert" className="mx-auto max-w-xl px-4 py-24 text-center text-ink">
+      <p>Couldn’t load your profile. Check your connection and try again.</p>
+      <button onClick={() => setAttempt((n) => n + 1)} className="mt-4 font-semibold text-pine-600 underline">Retry</button>
+    </div>
+  );
   if (!profile) return null;
 
   return (
@@ -190,7 +189,7 @@ export default function ProfilePage() {
           >
             📍 Use Current Location
           </button>
-          {profile.home_latitude && (
+          {profile.home_latitude != null && (
             <span className="ml-3 text-sm text-slate-500">
               {profile.home_latitude.toFixed(2)}, {profile.home_longitude?.toFixed(2)}
             </span>
@@ -200,7 +199,7 @@ export default function ProfilePage() {
         {message && (
           <p className={`rounded-lg px-3 py-2 text-sm ${
             message.startsWith("Error")
-              ? "bg-red-500/10 text-red-400"
+              ? "bg-diff-extreme/10 text-diff-extreme"
               : "bg-alpine-500/10 text-alpine-600"
           }`}>
             {message}

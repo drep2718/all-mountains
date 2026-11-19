@@ -24,6 +24,7 @@ export default function LocationSearch({ onSelect, selected, placeholder = "Sear
   const [results, setResults] = useState<Row[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
   // Whether results are shown is derived from the query, so no effect needs to
@@ -32,10 +33,15 @@ export default function LocationSearch({ onSelect, selected, placeholder = "Sear
 
   useEffect(() => {
     if (!query || query.length < 2) return;
+    let cancelled = false;
     const t = setTimeout(async () => {
       setLoading(true);
+      setOpen(true);
+      setError(false);
+      try {
       // Peaks and places in parallel; peaks first since a typed name is usually a summit.
-      const [peaks, places] = await Promise.all([searchPeaksByName(query), geocode(query)]);
+      const [peaks, places] = await Promise.all([searchPeaksByName(query), geocode(query).catch(() => [])]);
+      if (cancelled) return;
       const peakRows: Row[] = peaks
         .filter((p) => p.name)
         .slice(0, 4)
@@ -55,10 +61,11 @@ export default function LocationSearch({ onSelect, selected, placeholder = "Sear
         .filter((pl) => !peakNames.has(pl.name.split(",")[0].trim().toLowerCase()))
         .map((pl) => ({ kind: "place", place: pl }));
       setResults([...peakRows, ...placeRows].slice(0, 6));
-      setLoading(false);
-      setOpen(true);
+      } catch {
+        if (!cancelled) { setResults([]); setError(true); }
+      } finally { if (!cancelled) setLoading(false); }
     }, 300);
-    return () => clearTimeout(t);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [query]);
 
   useEffect(() => {
@@ -103,6 +110,8 @@ export default function LocationSearch({ onSelect, selected, placeholder = "Sear
         <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border border-border bg-surface shadow-2xl">
           {loading ? (
             <div className="px-4 py-3 text-sm text-ink-faint">Searching...</div>
+          ) : error ? (
+            <div role="alert" className="px-4 py-3 text-sm text-diff-extreme">Search unavailable. Check your connection.</div>
           ) : visible.length === 0 ? (
             <div className="px-4 py-3 text-sm text-ink-faint">No mountains or places found</div>
           ) : (

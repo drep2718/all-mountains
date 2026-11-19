@@ -11,8 +11,8 @@
  * peak page rendered its route lines on black.
  *
  * Measured, not assumed:
- *   /styles/v1/mapbox/outdoors-v12/tiles/512/14/2621/6334@2x   → 200, 248 KB
- *   /styles/v1/mapbox/satellite-streets-v12/.../@2x            → 200, 323 KB
+ *   /styles/v1/mapbox/outdoors-v12/tiles/512/14/2621/6334      → 200, 90429 bytes
+ *   /styles/v1/mapbox/satellite-streets-v12/...               → 200, 103834 bytes
  *   DEM tilejson's real template is on tiles.mapbox.com/raster/v1,
  *     NOT api.mapbox.com/v4/...webp, which is what was being cached.
  *
@@ -35,7 +35,7 @@ export const MAPBOX_STYLE_ID: Record<BaseStyle, string> = {
 export function rasterTemplate(style: BaseStyle, token: string): string {
   return (
     `https://api.mapbox.com/styles/v1/mapbox/${MAPBOX_STYLE_ID[style]}` +
-    `/tiles/512/{z}/{x}/{y}@2x?access_token=${token}`
+    `/tiles/512/{z}/{x}/{y}?access_token=${token}`
   );
 }
 
@@ -120,7 +120,10 @@ export function buildStyle(style: BaseStyle, token: string): StyleSpecification 
  * data that Mount Whitney would cost 3.4 MB when it actually cost 54.7 MB.
  */
 export const TILE_BYTES: Record<BaseStyle | "dem", number> = {
-  satellite: 323 * 1024,
-  outdoors: 248 * 1024,
-  dem: 168 * 1024,
+  // Full Whitney plan measured 2026-11-19: 70 tiles per imagery style,
+  // 49 lossless DEM tiles. Means: 96630 / 120277 / 458212 bytes.
+  // Round upward: a single z14 sample underestimated DEM by almost 3×.
+  satellite: 100 * 1024,
+  outdoors: 120 * 1024,
+  dem: 450 * 1024,
 };

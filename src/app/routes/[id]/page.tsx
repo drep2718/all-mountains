@@ -31,37 +31,37 @@ export default function RouteDetailPage() {
 
   const [route, setRoute] = useState<PeakRoute | null>(null);
   const [peak, setPeak] = useState<Peak | null>(null);
-  const [state, setState] = useState<"loading" | "ready" | "missing">("loading");
+  const [state, setState] = useState<"loading" | "ready" | "missing" | "error">("loading");
+
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from("routes")
-        .select("*")
-        .eq("id", Number(id))
-        .single();
-
-      if (cancelled) return;
-      if (error || !data) {
-        setState("missing");
-        return;
+      setState("loading");
+      setPeak(null);
+      try {
+        const routeId = Number(id);
+        if (!Number.isSafeInteger(routeId) || routeId <= 0) { setState("missing"); return; }
+        const { data, error } = await supabase.from("routes").select("*").eq("id", routeId).maybeSingle();
+        if (error) throw error;
+        if (cancelled) return;
+        if (!data) { setState("missing"); return; }
+        const r = data as PeakRoute;
+        const { data: p, error: peakError } = await supabase.from("peaks").select("*").eq("slug", r.peak_slug).single();
+        if (peakError) throw peakError;
+        if (cancelled) return;
+        setRoute(r);
+        setPeak(p as Peak);
+        setState("ready");
+      } catch {
+        if (!cancelled) setState("error");
       }
-      const r = data as PeakRoute;
-      setRoute(r);
-      setState("ready");
-
-      const { data: p } = await supabase
-        .from("peaks")
-        .select("*")
-        .eq("slug", r.peak_slug)
-        .single();
-      if (!cancelled && p) setPeak(p as Peak);
     })();
     return () => {
       cancelled = true;
     };
-  }, [id, supabase]);
+  }, [id, supabase, attempt]);
 
   if (state === "loading") {
     return (
@@ -70,6 +70,13 @@ export default function RouteDetailPage() {
       </div>
     );
   }
+
+  if (state === "error") return (
+    <div role="alert" className="mx-auto max-w-xl px-4 py-24 text-center text-ink">
+      <p>Couldn’t load this route. Check your connection and try again.</p>
+      <button onClick={() => setAttempt((n) => n + 1)} className="mt-4 font-semibold text-pine-600 underline">Retry</button>
+    </div>
+  );
 
   if (state === "missing" || !route) {
     return (

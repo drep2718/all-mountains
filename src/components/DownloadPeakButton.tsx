@@ -89,14 +89,18 @@ export default function DownloadPeakButton({
 
   async function remove() {
     setBusy(true);
-    await removePeakDownload(peak.slug);
-    notifyLocalStore();
-    setBusy(false);
+    setError(null);
+    try {
+      await removePeakDownload(peak.slug);
+      notifyLocalStore();
+    } catch { setError("Couldn't remove this download. Please try again."); }
+    finally { setBusy(false); }
   }
 
   if (saved) {
     return (
       <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4">
+        {error && <p role="alert" className="mb-2 text-sm text-diff-extreme">{error}</p>}
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-emerald-800">

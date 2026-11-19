@@ -10,7 +10,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { decodeSegments } from "../../src/lib/polyline.js";
-import { haversineM } from "./sources.js";
+import { projectOntoRoute } from "../../src/lib/navigation.js";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const DIR = path.join(ROOT, "data/catalogue");
@@ -204,9 +204,12 @@ async function main() {
       const pk = peakBySlug.get(r.peak_slug);
       if (pk) {
         let best = Infinity;
-        for (const [lng, lat] of lines.flat()) {
-          const d = haversineM(pk.latitude, pk.longitude, lat, lng);
-          if (d < best) best = d;
+        // Simplification removes intermediate vertices without removing the
+        // trail between them. Measuring vertices alone falsely rejected two
+        // valid routes; project onto each segment instead (same 200 m tolerance).
+        for (const line of lines) {
+          const projection = projectOntoRoute([pk.longitude, pk.latitude], line);
+          if (projection) best = Math.min(best, projection.offRouteM);
         }
         if (Math.abs(best - r.distance_to_summit_m) > 200) approachWrong++;
       }

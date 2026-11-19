@@ -434,13 +434,13 @@ async function alreadyDone(file: string): Promise<Set<string>> {
  * in place. Runs single-threaded and slowly on purpose: the point is to be
  * gentler than the main pass, not faster.
  */
-async function retryPass(curated: CuratedPeak[], limit: number) {
+async function retryPass(curated: CuratedPeak[], limit: number, only: Set<string> | null) {
   const existing = (await readFile(PEAKS_OUT, "utf8"))
     .split("\n")
     .filter(Boolean)
     .map((l) => JSON.parse(l) as EnrichedPeak);
 
-  const failed = existing.filter((p) => !p.wikipedia_title).slice(0, limit === Infinity ? undefined : limit);
+  const failed = existing.filter((p) => !p.wikipedia_title && (!only || only.has(p.id))).slice(0, limit === Infinity ? undefined : limit);
   console.log(`retrying ${failed.length} peaks with no article (of ${existing.length})\n`);
   if (!failed.length) return;
 
@@ -504,11 +504,11 @@ async function main() {
     await readFile(path.join(ROOT, "data/curated-peaks.json"), "utf8")
   ) as CuratedPeak[];
 
-  if (retryMisses) return retryPass(curated, limit);
+  if (retryMisses) return retryPass(curated, limit, only);
 
   const done = await alreadyDone(PEAKS_OUT);
   let queue = curated.filter((p) => !done.has(p.id));
-  if (only) queue = curated.filter((p) => only.has(p.id));
+  if (only) queue = queue.filter((p) => only.has(p.id));
   queue = queue.slice(0, limit === Infinity ? undefined : limit);
 
   console.log(

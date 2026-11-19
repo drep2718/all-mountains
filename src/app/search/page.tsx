@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { searchAll } from "@/lib/search";
@@ -28,7 +28,7 @@ function SearchResults() {
     setQuery(initialQ);
   }
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ["search", query],
     queryFn: () => searchAll(query),
     enabled: query.trim().length > 0,
@@ -47,7 +47,7 @@ function SearchResults() {
   const showPeaks = tab === "all" || tab === "peaks";
   const showTrails = tab === "all" || tab === "trails";
   const nothing =
-    query.trim().length > 0 && !isLoading && peaks.length === 0 && routes.length === 0;
+    query.trim().length > 0 && !isLoading && !error && peaks.length === 0 && routes.length === 0;
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-24 pt-6 md:pt-24">
@@ -114,6 +114,13 @@ function SearchResults() {
       {query.trim().length === 0 && (
         <div className="py-16 text-center text-ink-faint">
           Start typing to search across every peak and trail.
+        </div>
+      )}
+
+      {error && (
+        <div role="alert" className="rounded-xl border border-diff-extreme/40 bg-surface p-4 text-sm text-diff-extreme">
+          Couldn’t search the catalogue. Check your connection and try again.
+          <button onClick={() => void refetch()} className="ml-3 font-semibold underline">Retry</button>
         </div>
       )}
 

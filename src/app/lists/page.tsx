@@ -30,12 +30,12 @@ export default function ListsPage() {
   const create = useMutation({
     mutationFn: () => createList(newName.trim()),
     onSuccess: () => { setNewName(""); setError(null); qc.invalidateQueries({ queryKey: ["my-lists"] }); },
-    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Couldn't create the list."),
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Couldn’t create the list."),
   });
   const remove = useMutation({
     mutationFn: (id: number) => deleteList(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["my-lists"] }),
-    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Couldn't delete the list."),
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Couldn’t delete the list."),
   });
 
   // Still checking auth
@@ -70,6 +70,7 @@ export default function ListsPage() {
         className="mb-8 flex gap-2"
       >
         <input
+          maxLength={100}
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           placeholder="e.g. Colorado 14ers to climb"
@@ -90,7 +91,12 @@ export default function ListsPage() {
         </div>
       )}
 
-      {lists.isLoading ? (
+      {lists.error ? (
+        <div role="alert" className="rounded-xl border border-diff-extreme/40 p-4 text-sm text-diff-extreme">
+          Couldn’t load your lists.
+          <button onClick={() => void lists.refetch()} className="ml-3 font-semibold underline">Retry</button>
+        </div>
+      ) : lists.isLoading ? (
         <div className="text-sm text-ink-faint">Loading…</div>
       ) : (lists.data ?? []).length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-ink-faint">

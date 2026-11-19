@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -12,9 +14,16 @@ export default function ListDetailPage() {
   const router = useRouter();
   const qc = useQueryClient();
   const listId = Number(id);
+  const validId = Number.isSafeInteger(listId) && listId > 0;
+  const [userId, setUserId] = useState<string | null>(null);
+  useEffect(() => {
+    const db = createClient();
+    const { data: { subscription } } = db.auth.onAuthStateChange((_event, session) => setUserId(session?.user.id ?? null));
+    return () => subscription.unsubscribe();
+  }, []);
 
-  const list = useQuery({ queryKey: ["list", listId], queryFn: () => fetchList(listId) });
-  const items = useQuery({ queryKey: ["list-items", listId], queryFn: () => fetchListItems(listId) });
+  const list = useQuery({ queryKey: ["list", listId], queryFn: () => fetchList(listId), enabled: validId });
+  const items = useQuery({ queryKey: ["list-items", listId], queryFn: () => fetchListItems(listId), enabled: !!list.data });
 
   const remove = useMutation({
     mutationFn: (it: ListItem) => removeItem(listId, it.peak_slug),
@@ -24,6 +33,7 @@ export default function ListDetailPage() {
     },
   });
 
+  if (list.error) return <div role="alert" className="p-8 text-sm text-diff-extreme">Couldn’t load this list. <button className="underline" onClick={() => void list.refetch()}>Retry</button></div>;
   if (list.isLoading) return <div className="p-8 text-sm text-ink-faint">Loading…</div>;
   if (!list.data) return <div className="p-8 text-sm text-ink-muted">List not found.</div>;
 
@@ -43,7 +53,10 @@ export default function ListDetailPage() {
         {rows.length} item{rows.length === 1 ? "" : "s"}
       </p>
 
-      {rows.length === 0 ? (
+      {remove.error && <p role="alert" className="mb-4 text-sm text-diff-extreme">Couldn’t remove this mountain. Try again.</p>}
+      {items.error ? (
+        <div role="alert" className="p-4 text-sm text-diff-extreme">Couldn’t load the mountains in this list. <button className="underline" onClick={() => void items.refetch()}>Retry</button></div>
+      ) : items.isLoading ? <p className="text-sm text-ink-muted">Loading mountains…</p> : rows.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-ink-faint">
           Empty list. Add mountains with “Save to list”.
         </div>
@@ -56,7 +69,7 @@ export default function ListDetailPage() {
               <li key={it.id} className="flex items-center gap-3 px-4 py-3">
                 <span
                   className="h-9 w-1.5 flex-none rounded-full"
-                  style={{ background: diff ? DIFFICULTY_HEX[diff] : "#8a8a80" }}
+                  style={{ background: diff ? DIFFICULTY_HEX[diff] : "var(--color-ink-faint)" }}
                 />
                 <Link href={`/peaks/${it.peak_slug}`} className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold text-ink">
@@ -82,14 +95,14 @@ export default function ListDetailPage() {
                     {DIFFICULTY_LABEL[diff]}
                   </span>
                 )}
-                <button
+                {list.data?.user_id === userId && <button
                   onClick={() => remove.mutate(it)}
                   disabled={remove.isPending}
                   className="flex-none rounded-lg px-2 py-1 text-xs text-ink-faint transition-colors hover:text-diff-extreme disabled:opacity-50"
                   aria-label="Remove"
                 >
                   ✕
-                </button>
+                </button>}
               </li>
             );
           })}
