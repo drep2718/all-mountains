@@ -82,6 +82,13 @@ export interface PeakRoute {
   bbox_max_lng: number;
 
   distance_to_summit_m: number | null;
+  /**
+   * Highest point on the route, from the terrain DEM. Null until the
+   * elevation pass has measured it. Against `peak.elevation_m` this gives
+   * the vertical gap to the summit, which is the number that actually
+   * describes a mountain — see `describeSummitGap`.
+   */
+  high_point_m: number | null;
   is_summit_route: boolean;
 
   surface: string | null;
@@ -197,8 +204,9 @@ export function formatDistance(km: number | null): string {
  */
 export function noRoutesMessage(peak: Pick<Peak, "difficulty">): string {
   return peak.difficulty === "technical"
-    ? "No mapped walking trail — this summit is a climb."
-    : "No mapped trail reaches this summit yet.";
+    ? "No mapped walking trail — this summit is a climb. The way up is a " +
+        "mountaineering line, which OpenStreetMap does not record as a path."
+    : "OpenStreetMap has no footpaths near this summit yet.";
 }
 
 export function accessInfo(

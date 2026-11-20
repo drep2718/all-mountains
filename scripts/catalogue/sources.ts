@@ -317,3 +317,75 @@ export async function wikidataLabel(id: string): Promise<string | null> {
   );
   return data.entities?.[id]?.labels?.en?.value ?? null;
 }
+
+// --- Commons image URLs ---------------------------------------------------
+
+/**
+ * The only thumbnail widths Wikimedia will serve.
+ *
+ * Measured, not assumed: of 120/160/240/250/320/480/500/640/720/800/960/
+ * 1024/1080/1280/1500/1600/1800/1920/2048/2560 probed against a live file,
+ * exactly these six returned 200 and every other width returned 400. Commons
+ * stopped generating thumbnails on demand at arbitrary sizes; asking for
+ * 640px does not give you a smaller picture, it gives you an error page.
+ */
+export const COMMONS_WIDTHS = [120, 250, 500, 960, 1280, 1920] as const;
+
+/** Thumbnails moved to their own host; `upload.` now serves originals only. */
+const THUMB_HOST = "thumb.wikimedia.org";
+
+/** The narrowest allowed width that is still at least `want`. */
+const snapWidth = (want: number): number =>
+  COMMONS_WIDTHS.find((w) => w >= want) ?? COMMONS_WIDTHS[COMMONS_WIDTHS.length - 1];
+
+/**
+ * Rewrite a Commons file URL to a thumbnail at (or just above) `width`.
+ *
+ * Three separate things were wrong with the URLs we stored, and all three
+ * had to be measured against the live service rather than reasoned about:
+ *
+ *  1. `iiurlwidth=1600` does not return a 1600px URL. The API snaps to its
+ *     own ladder and hands back 1920px — so the string replace meant to
+ *     derive a thumbnail (`.replace("/1600px-", "/640px-")`) never matched
+ *     a single one of 5,628 rows, and every gallery thumbnail in the app
+ *     was a full-size image.
+ *  2. Thumbnails are served from `thumb.wikimedia.org`. The same path under
+ *     `upload.wikimedia.org`, which is what the API returns for originals,
+ *     returns 400.
+ *  3. Every URL carried `?utm_source=commons.wikimedia.org`, which splits
+ *     the CDN cache and buys nothing.
+ *
+ * On a PWA whose whole point is downloading content over a phone connection,
+ * serving a 597 KB original where a 60 KB thumbnail belongs is not cosmetic.
+ */
+export function commonsThumb(rawUrl: string, width: number): string {
+  let u: URL;
+  try {
+    u = new URL(rawUrl);
+  } catch {
+    return rawUrl;
+  }
+  u.search = "";
+  const w = snapWidth(width);
+  const p = u.pathname;
+
+  // Already a thumbnail: restate it at an allowed width on the thumb host.
+  const asThumb = p.match(/^(.*\/thumb\/.*?)\/\d+px-([^/]+)$/);
+  if (asThumb) {
+    u.host = THUMB_HOST;
+    u.pathname = `${asThumb[1]}/${w}px-${asThumb[2]}`;
+    return u.toString();
+  }
+
+  // Original form: insert /thumb/ and append the sized filename.
+  const asOriginal = p.match(/^(.*\/commons)\/([0-9a-f])\/([0-9a-f]{2})\/([^/]+)$/);
+  if (asOriginal) {
+    const [, base, a, ab, file] = asOriginal;
+    u.host = THUMB_HOST;
+    u.pathname = `${base}/thumb/${a}/${ab}/${file}/${w}px-${file}`;
+    return u.toString();
+  }
+
+  // Some other shape — strip the tracking parameter and leave it alone.
+  return u.toString();
+}

@@ -11,6 +11,7 @@ import {
   type Peak,
   type PeakRoute,
 } from "@/lib/peak-types";
+import { describeSummitGap } from "@/lib/summit-gap";
 import { routeStaticMapUrl } from "@/lib/staticMap";
 import ElevationProfile from "@/components/ElevationProfile";
 import SaveToListButton from "@/components/SaveToListButton";
@@ -93,6 +94,13 @@ export default function RouteDetailPage() {
   const access = accessInfo(route);
   const mapUrl = routeStaticMapUrl(route, 1200, 500);
 
+  const summitGap = describeSummitGap({
+    isSummitRoute: route.is_summit_route,
+    distanceToSummitM: route.distance_to_summit_m,
+    highPointM: route.high_point_m,
+    summitElevationM: peak?.elevation_m ?? null,
+  });
+
   const stats = [
     { label: "Distance", value: formatDistance(route.distance_km) },
     { label: "Time", value: formatDuration(route.est_time_min) },
@@ -101,12 +109,11 @@ export default function RouteDetailPage() {
     { label: "Difficulty", value: route.difficulty ?? "—" },
     { label: "Surface", value: route.surface ?? "—" },
     {
+      // "287 m short" was measured in plan view, so a route that ends 830 m
+      // beneath the summit could read as nearly there. Height first.
       label: "To summit",
-      value: route.is_summit_route
-        ? "Reaches the top"
-        : route.distance_to_summit_m != null
-          ? `${route.distance_to_summit_m} m short`
-          : "—",
+      value: route.is_summit_route ? "Reaches the top" : (summitGap?.label ?? "—"),
+      title: summitGap?.detail,
     },
     { label: "Ref", value: route.ref ?? "—" },
   ];
@@ -163,9 +170,12 @@ export default function RouteDetailPage() {
 
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {stats.map((s) => (
-          <div key={s.label} className="rounded-xl border border-border bg-surface p-3">
+          <div key={s.label} className="rounded-xl border border-border bg-surface p-3" title={s.title}>
             <div className="text-[11px] text-ink-faint">{s.label}</div>
-            <div className="mt-0.5 truncate font-mono text-sm font-semibold text-ink">
+            {/* Wraps rather than truncates: "stops 2,065 m below the top"
+                is longer than a tile and losing the end of it would leave
+                "stops 2,065 m below the…", which says nothing useful. */}
+            <div className="mt-0.5 font-mono text-sm font-semibold leading-snug text-ink">
               {s.value}
             </div>
           </div>

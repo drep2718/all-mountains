@@ -1,16 +1,26 @@
 import Link from "next/link";
 import { type PeakRoute as Route, formatDuration } from "@/lib/peak-types";
 import { routeStaticMapUrl } from "@/lib/staticMap";
+import { describeSummitGap } from "@/lib/summit-gap";
 
 export default function RouteCard({
   route,
   peakName,
+  summitElevationM,
 }: {
   route: Route;
   /** The summit this route serves — a route has exactly one now. */
   peakName?: string;
+  /** Lets the card say how far *below* the top a route stops, not just how far from it. */
+  summitElevationM?: number | null;
 }) {
   const mapUrl = routeStaticMapUrl(route, 640, 360);
+  const gap = describeSummitGap({
+    isSummitRoute: route.is_summit_route,
+    distanceToSummitM: route.distance_to_summit_m,
+    highPointM: route.high_point_m,
+    summitElevationM: summitElevationM ?? null,
+  });
 
   return (
     <Link
@@ -70,8 +80,10 @@ export default function RouteCard({
           )}
           {route.is_summit_route ? (
             <span className="text-pine-600">reaches the summit</span>
-          ) : route.distance_to_summit_m != null ? (
-            <span className="text-ink-faint">{route.distance_to_summit_m} m short</span>
+          ) : gap ? (
+            <span className="text-ink-faint" title={gap.detail}>
+              {gap.label}
+            </span>
           ) : null}
         </div>
       </div>

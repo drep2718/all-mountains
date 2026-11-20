@@ -127,13 +127,23 @@ async function main() {
   check(false, "has a usable summary", withSummary.length / peaks.length >= 0.85,
     `${withSummary.length} (${pct(withSummary.length, peaks.length)})`);
 
-  const withPhoto = peaks.filter((p) => p.photo_count > 0);
-  check(false, "has >=1 real photo (target 80%)", withPhoto.length / peaks.length >= 0.8,
+  // Count the photo rows themselves, not `peak.photo_count`. That counter is
+  // written once by enrich-peaks and never updated, so every photo added by a
+  // later pass — the hero backfill, the geosearch gap-fill — was invisible to
+  // this check: it reported 79.3% while 90.5% of peaks had a picture. A
+  // denormalised count that only one of three writers maintains is not a
+  // measurement, it is a stale guess.
+  const photographed = new Set(photos.map((p) => p.peak_slug));
+  const withPhoto = peaks.filter((p) => photographed.has(p.id));
+  check(false, "has >=1 real photo (target 95%)", withPhoto.length / peaks.length >= 0.95,
     `${withPhoto.length} (${pct(withPhoto.length, peaks.length)})`);
 
   // The satellite fallback means every peak has *something* to show, which is
-  // the criterion that actually matters for the UI.
-  const withVisual = peaks.filter((p) => p.hero_photo_url || true);
+  // the criterion that actually matters for the UI. (This read
+  // `p.hero_photo_url || true` and so asserted nothing at all.)
+  const withVisual = peaks.filter(
+    (p) => photographed.has(p.id) || p.hero_photo_url || (p.latitude != null && p.longitude != null)
+  );
   check(true, "every peak has a visual (satellite fallback)",
     withVisual.length === peaks.length, `${withVisual.length}/${peaks.length}`);
 

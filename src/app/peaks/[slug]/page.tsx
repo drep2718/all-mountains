@@ -19,6 +19,7 @@ import {
   type SummitLog,
 } from "@/lib/peak-types";
 import { getPeakDownload } from "@/lib/offline";
+import { coverageNotice, describeSummitGap, routeCoverage } from "@/lib/summit-gap";
 import dynamic from "next/dynamic";
 import PeakGallery from "@/components/PeakGallery";
 import RouteProfileChart from "@/components/RouteProfileChart";
@@ -211,6 +212,7 @@ export default function PeakPage() {
   const summitRoutes = routes.filter((r) => r.is_summit_route);
   const approachRoutes = routes.filter((r) => !r.is_summit_route);
   const ordered = [...summitRoutes, ...approachRoutes];
+  const coverage = routeCoverage(routes);
   const activeId = selectedRoute ?? ordered[0]?.id ?? null;
   const activeRoute = ordered.find((r) => r.id === activeId) ?? null;
   const activeProfile = activeId != null ? (profiles.get(activeId) ?? null) : null;
@@ -339,6 +341,24 @@ export default function PeakPage() {
           </p>
         ) : (
           <>
+            {/*
+              A peak whose paths all stop below the top used to look exactly
+              like one with a summit trail — the list was full, nothing said
+              otherwise. On 188 peaks that is the single most important fact
+              on the page, so it goes above the list rather than being left
+              for the reader to infer from every row saying "stops short".
+            */}
+            {coverage !== "summit" && (
+              <div className="mb-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+                <p className="text-sm font-semibold text-ink">
+                  {coverageNotice(coverage, routes.length)?.title}
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+                  {coverageNotice(coverage, routes.length)?.body}
+                </p>
+              </div>
+            )}
+
             <div className="space-y-2">
               {ordered.map((r) => (
                 <RouteRow
@@ -347,6 +367,7 @@ export default function PeakPage() {
                   peakSlug={peak.slug}
                   profile={profiles.get(r.id) ?? null}
                   difficulty={peak.difficulty}
+                  summitElevationM={peak.elevation_m}
                   selected={r.id === activeId}
                   onSelect={() => setSelectedRoute(r.id)}
                 />
@@ -452,6 +473,7 @@ function RouteRow({
   peakSlug,
   profile,
   difficulty,
+  summitElevationM,
   selected,
   onSelect,
 }: {
@@ -459,6 +481,7 @@ function RouteRow({
   peakSlug: string;
   profile: RouteProfile | null;
   difficulty: Peak["difficulty"];
+  summitElevationM: number;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -469,6 +492,15 @@ function RouteRow({
   const minutes = profile
     ? estimateMinutes(profile.distanceKm, profile.ascentM, profile.descentM, difficulty)
     : route.est_time_min;
+  // The live profile, when the terrain has loaded, knows the high point
+  // better than the stored column does — and agrees with the chart drawn
+  // below this row, which the stored value might not.
+  const gap = describeSummitGap({
+    isSummitRoute: route.is_summit_route,
+    distanceToSummitM: route.distance_to_summit_m,
+    highPointM: profile?.maxEle ?? route.high_point_m,
+    summitElevationM,
+  });
 
   return (
     <div
@@ -504,9 +536,7 @@ function RouteRow({
             <span>{formatDuration(minutes)}</span>
             {profile ? <span>max {profile.maxGrade}%</span> : null}
             {route.route_type && <span>{route.route_type}</span>}
-            {!route.is_summit_route && route.distance_to_summit_m != null && (
-              <span>stops {route.distance_to_summit_m} m short</span>
-            )}
+            {gap && <span title={gap.detail}>{gap.label}</span>}
           </div>
           {access.length > 0 && (
             <div className="mt-1 text-[11px] text-ink-faint">{access.join(" · ")}</div>

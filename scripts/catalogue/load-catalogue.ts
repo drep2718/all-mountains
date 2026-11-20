@@ -97,6 +97,27 @@ async function assertSchema(db: SupabaseClient): Promise<void> {
   console.log("✓ schema matches");
 }
 
+/**
+ * Is the route high-point column there yet?
+ *
+ * `high_point_m` arrives in a migration that is applied separately from this
+ * script, so the loader has to run correctly on both sides of it: sending a
+ * column the table does not have fails the whole upsert, and waiting for the
+ * migration would block every other fix in the batch. Asking once and
+ * dropping the field when it is absent means the data lands the next time
+ * this runs, with no second step to remember.
+ */
+async function hasHighPointColumn(db: SupabaseClient): Promise<boolean> {
+  const { error } = await db.from("routes").select("high_point_m").limit(1);
+  if (!error) return true;
+  console.log(
+    `note: routes.high_point_m not present — route high points will be skipped.\n` +
+      `      Apply supabase/migrations/20261119000100_route_high_point.sql and re-run\n` +
+      `      to fill them in.`
+  );
+  return false;
+}
+
 async function main() {
   const dry = process.argv.includes("--dry");
 
@@ -131,6 +152,9 @@ async function main() {
     // Naismith with the climb included. Without this the stored time is the
     // flat-walking figure the importer wrote as a placeholder.
     r.est_time_min = e.est_time_min;
+    // The height the route actually reaches, so the page can say how far
+    // below the summit it stops rather than only how far away in plan view.
+    r.high_point_m = e.max_ele_m;
     measured++;
 
     // `is_summit_route` came out of the importer as `approach <= 500 m`,
@@ -232,9 +256,13 @@ async function main() {
   const db = createClient(URL_, KEY, { auth: { persistSession: false } });
   await assertSchema(db);
 
+  const sendable = (await hasHighPointColumn(db))
+    ? routeRows
+    : routeRows.map(({ high_point_m: _drop, ...rest }) => rest);
+
   await upsertAll(db, "peaks", peakRows, "slug");
   if (photoRows.length) await upsertAll(db, "peak_photos", photoRows, "peak_slug,url");
-  if (routeRows.length) await upsertAll(db, "routes", routeRows, "peak_slug,osm_id");
+  if (sendable.length) await upsertAll(db, "routes", sendable, "peak_slug,osm_id");
 
   const count = async (t: string) => {
     const { count: n } = await db.from(t).select("*", { count: "exact", head: true });
