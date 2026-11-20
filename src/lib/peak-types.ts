@@ -199,6 +199,41 @@ export function formatDistance(km: number | null): string {
 }
 
 /**
+ * A time estimate as a range, not a single figure.
+ *
+ * Naismith's rule is a fit party moving steadily with no stops, so it is a
+ * floor rather than a prediction — and a floor printed as "7h 40m" reads
+ * like a promise. AllTrails states these as "Est. 1–1.5 hr" for the same
+ * reason: the honest output of a rough model is an interval.
+ *
+ * The upper bound is 1.4x, which is roughly where guidebook times for the
+ * routes we can check against actually land.
+ */
+export function formatEstimate(minutes: number | null): string {
+  if (!minutes || minutes <= 0) return "—";
+  const upper = minutes * 1.4;
+  // Under two hours people think in minutes; past that, in hours.
+  if (upper < 120) {
+    const round5 = (m: number) => Math.max(5, Math.round(m / 5) * 5);
+    return `${round5(minutes)}–${round5(upper)} min`;
+  }
+  const hrs = (m: number) => {
+    const h = m / 60;
+    return h < 10 ? (Math.round(h * 2) / 2).toString() : Math.round(h).toString();
+  };
+  const lo = hrs(minutes);
+  const hi = hrs(upper);
+  return lo === hi ? `${lo} hr` : `${lo}–${hi} hr`;
+}
+
+/** A filled dot in the grade's colour, as the AllTrails cards use. */
+export const DIFFICULTY_DOT: Record<PeakDifficulty, string> = {
+  hike: "bg-pine-500",
+  scramble: "bg-[#e8a000]",
+  technical: "bg-[#d4542a]",
+};
+
+/**
  * Peaks with no mapped trail are not a data gap — a technical peak often has
  * no path because you climb it. Say so rather than showing an empty list.
  */

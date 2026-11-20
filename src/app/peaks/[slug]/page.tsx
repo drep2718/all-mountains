@@ -6,11 +6,11 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   CATEGORY_LABEL,
+  DIFFICULTY_DOT,
   DIFFICULTY_LABEL,
   accessInfo,
-  difficultyClasses,
   formatDistance,
-  formatDuration,
+  formatEstimate,
   formatElevation,
   noRoutesMessage,
   type Peak,
@@ -20,11 +20,12 @@ import {
 } from "@/lib/peak-types";
 import { getPeakDownload } from "@/lib/offline";
 import { coverageNotice, describeSummitGap, routeCoverage } from "@/lib/summit-gap";
+import { tripFigures } from "@/lib/trip";
 import dynamic from "next/dynamic";
 import PeakGallery from "@/components/PeakGallery";
 import RouteProfileChart from "@/components/RouteProfileChart";
 import HazardPanel from "@/components/HazardPanel";
-import { assessHazards, estimateMinutes, type RouteProfile } from "@/lib/terrain";
+import { assessHazards, type RouteProfile } from "@/lib/terrain";
 import PeakWeather from "@/components/PeakWeather";
 import DownloadPeakButton from "@/components/DownloadPeakButton";
 import LogSummitPanel from "@/components/LogSummitPanel";
@@ -226,6 +227,24 @@ export default function PeakPage() {
    * the terrain still only sets `selectedRoute`, never this, because moving
    * the camera under the cursor makes the map impossible to use.
    */
+  /**
+   * The figures that go in the header: the route someone would actually
+   * take, which is the first in the ordered list — summit routes first,
+   * then nearest approach.
+   */
+  const headlineRoute = ordered[0] ?? null;
+  const headline = headlineRoute
+    ? tripFigures({
+        routeType: headlineRoute.route_type,
+        profile: profiles.get(headlineRoute.id) ?? null,
+        distanceKm: headlineRoute.distance_km,
+        ascentM: headlineRoute.ascent_m,
+        descentM: headlineRoute.descent_m,
+        storedMinutes: headlineRoute.est_time_min,
+        difficulty: peak.difficulty,
+      })
+    : null;
+
   const pickRoute = (id: number) => {
     setSelectedRoute(id);
     setFocusRoute((f) => ({ id, nonce: (f?.nonce ?? 0) + 1 }));
@@ -265,29 +284,87 @@ export default function PeakPage() {
 
       <PeakGallery peak={peak} photos={photos} />
 
-      {/* Title */}
+      {/*
+        Title block, in the AllTrails arrangement: breadcrumb, then the name
+        at full size, then everything else on one quiet line beneath it. The
+        previous version opened with a row of coloured pills, so the first
+        thing the eye landed on was a badge rather than the mountain's name.
+      */}
       <div className="mt-5">
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <span
-            className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${difficultyClasses(peak.difficulty)}`}
-          >
+        <nav className="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-ink-faint">
+          <Link href="/peaks" className="hover:text-ink hover:underline">
+            Peaks
+          </Link>
+          {[peak.country, peak.region].filter(Boolean).map((part) => (
+            <span key={part} className="flex items-center gap-1.5">
+              <span aria-hidden>/</span>
+              <span>{part}</span>
+            </span>
+          ))}
+        </nav>
+
+        <h1 className="font-display text-3xl font-bold tracking-tight text-ink sm:text-[2.5rem] sm:leading-[1.1]">
+          {peak.name}
+        </h1>
+
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-muted">
+          <span className="inline-flex items-center gap-1.5 font-medium text-ink">
+            <span className={`h-2 w-2 shrink-0 rounded-full ${DIFFICULTY_DOT[peak.difficulty]}`} />
             {DIFFICULTY_LABEL[peak.difficulty]}
           </span>
           {peak.category === "highpoint" && (
-            <span className="rounded-full bg-[#e8b33a] px-2.5 py-1 text-xs font-bold text-[#3d2c00]">
-              🥇 {peak.region ? `${peak.region} highpoint` : "Highpoint"}
-            </span>
+            <>
+              <span aria-hidden>·</span>
+              <span>🥇 {peak.region ? `${peak.region} highpoint` : "Highpoint"}</span>
+            </>
           )}
           {peak.category === "top_peak" && (
-            <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-medium text-violet-900 ring-1 ring-violet-300">
-              {CATEGORY_LABEL.top_peak}
-            </span>
+            <>
+              <span aria-hidden>·</span>
+              <span>{CATEGORY_LABEL.top_peak}</span>
+            </>
+          )}
+          {peak.range_name && (
+            <>
+              <span aria-hidden>·</span>
+              <span>{peak.range_name}</span>
+            </>
+          )}
+          <span aria-hidden>·</span>
+          <span>{[peak.region, peak.country].filter(Boolean).join(", ")}</span>
+        </div>
+
+        {/*
+          The headline figures, sized the way AllTrails sizes them: a large
+          number, a small unit, a quiet label underneath. Height and the best
+          summit route's length and climb are what someone is here to find
+          out, so they are the three that get to be big.
+        */}
+        <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-3 border-b border-border pb-4">
+          <Stat value={peak.elevation_m.toLocaleString()} unit="m" label="Elevation" />
+          <Stat
+            value={Math.round(peak.elevation_m * 3.28084).toLocaleString()}
+            unit="ft"
+            label="In feet"
+          />
+          {headline && (
+            <>
+              <Stat
+                value={formatDistance(headline.distanceKm).replace(/\s*km$/, "")}
+                unit="km"
+                label={headline.roundTrip ? "Round trip" : "Length"}
+              />
+              {headline.ascentM != null && (
+                <Stat
+                  value={headline.ascentM.toLocaleString()}
+                  unit="m"
+                  label="Elevation gain"
+                />
+              )}
+              <Stat value={formatEstimate(headline.minutes)} label="Est. time" />
+            </>
           )}
         </div>
-        <h1 className="font-display text-3xl font-bold text-ink sm:text-4xl">{peak.name}</h1>
-        <p className="mt-1 text-ink-muted">
-          {[peak.range_name, peak.region, peak.country].filter(Boolean).join(" · ")}
-        </p>
       </div>
 
       {/* The mountain itself */}
@@ -311,11 +388,10 @@ export default function PeakPage() {
         </section>
       )}
 
-      {/* Stats */}
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* The rest of the facts. Elevation and its conversion live in the
+          header now, so repeating them here would just be noise. */}
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {[
-          { label: "Elevation", value: `${peak.elevation_m.toLocaleString()} m` },
-          { label: "In feet", value: `${Math.round(peak.elevation_m * 3.28084).toLocaleString()} ft` },
           {
             label: "Prominence",
             value: peak.prominence_m ? `${peak.prominence_m.toLocaleString()} m` : "—",
@@ -506,12 +582,21 @@ function RouteRow({
   onSelect: () => void;
 }) {
   const access = accessInfo(route);
-  // Prefer what we measured off the terrain over what the import guessed.
-  const km = profile?.distanceKm ?? route.distance_km;
-  const ascent = profile?.ascentM ?? route.ascent_m;
-  const minutes = profile
-    ? estimateMinutes(profile.distanceKm, profile.ascentM, profile.descentM, difficulty)
-    : route.est_time_min;
+  // Prefer what we measured off the terrain over what the import guessed,
+  // and describe the whole trip rather than the stored one-way line — see
+  // `tripFigures`.
+  const trip = tripFigures({
+    routeType: route.route_type,
+    profile,
+    distanceKm: route.distance_km,
+    ascentM: route.ascent_m,
+    descentM: route.descent_m,
+    storedMinutes: route.est_time_min,
+    difficulty,
+  });
+  const km = trip.distanceKm;
+  const ascent = trip.ascentM;
+  const minutes = trip.minutes;
   // The live profile, when the terrain has loaded, knows the high point
   // better than the stored column does — and agrees with the chart drawn
   // below this row, which the stored value might not.
@@ -551,9 +636,12 @@ function RouteRow({
             )}
           </div>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-xs text-ink-faint">
-            <span>{formatDistance(km)}</span>
+            <span title={trip.roundTrip ? `${formatDistance(trip.oneWayKm)} each way` : undefined}>
+              {formatDistance(km)}
+              {trip.roundTrip && " round trip"}
+            </span>
             {ascent ? <span>↑ {ascent.toLocaleString()} m</span> : null}
-            <span>{formatDuration(minutes)}</span>
+            <span>{formatEstimate(minutes)}</span>
             {profile ? <span>max {profile.maxGrade}%</span> : null}
             {route.route_type && <span>{route.route_type}</span>}
             {gap && <span title={gap.detail}>{gap.label}</span>}
@@ -583,3 +671,21 @@ function RouteRow({
 
 // Elevation is formatted in several places; keep one implementation.
 void formatElevation;
+
+/**
+ * One headline figure: a large number, a small unit, a quiet label.
+ *
+ * The size difference is the point — it lets someone read the three
+ * numbers that matter off the page without reading any words.
+ */
+function Stat({ value, unit, label }: { value: string; unit?: string; label: string }) {
+  return (
+    <div>
+      <div className="font-display text-2xl font-bold leading-none tracking-tight text-ink">
+        {value}
+        {unit && <span className="ml-0.5 text-sm font-semibold text-ink-muted">{unit}</span>}
+      </div>
+      <div className="mt-1 text-xs text-ink-faint">{label}</div>
+    </div>
+  );
+}

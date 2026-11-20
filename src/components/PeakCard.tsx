@@ -1,22 +1,40 @@
 import Link from "next/link";
 import {
   CATEGORY_LABEL,
+  DIFFICULTY_DOT,
   DIFFICULTY_LABEL,
-  difficultyClasses,
   type Peak,
 } from "@/lib/peak-types";
+import { commonsWidth } from "@/lib/commons";
 
 /** Falls back to a satellite view so every card shows a mountain. */
 function cardImage(peak: Peak): string | null {
-  if (peak.hero_photo_url) return peak.hero_photo_url;
+  // 500 px, not the stored 1,280: this is a card, and a grid of them was
+  // pulling two dozen full-size photographs to fill 300 px boxes.
+  if (peak.hero_photo_url) return commonsWidth(peak.hero_photo_url, 500);
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
   if (!token) return null;
   return (
     `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/` +
-    `${peak.longitude},${peak.latitude},12.5,0/640x400@2x?access_token=${token}`
+    `${peak.longitude},${peak.latitude},12.5,0/480x360@2x?access_token=${token}`
   );
 }
 
+/**
+ * A peak in a grid, in the shape AllTrails uses for a trail.
+ *
+ * The change from the previous card is mostly subtraction. It was a
+ * bordered panel with a shadow, a gradient scrim, a badge floating over
+ * the photo, and the facts spread across three rows separated by rules.
+ * The version here is an image and three lines of text on the page
+ * itself: no border, no shadow, no scrim, and one metadata row with
+ * middots. The photograph is doing the work either way, and the frame
+ * around it was competing with the mountain in it.
+ *
+ * The single row also forces the facts into priority order — height,
+ * grade, prominence, routes — instead of letting each one claim its own
+ * line and implying they matter equally.
+ */
 export default function PeakCard({
   peak,
   distance,
@@ -27,20 +45,18 @@ export default function PeakCard({
   summited?: boolean;
 }) {
   const imageUrl = cardImage(peak);
+  const place = [peak.range_name, peak.region ?? peak.country].filter(Boolean).join(" · ");
 
   return (
-    <Link
-      href={`/peaks/${peak.slug}`}
-      className="group overflow-hidden rounded-2xl border border-border bg-surface transition-all hover:border-border-bright hover:shadow-xl hover:shadow-black/40"
-    >
-      <div className="topo-texture relative h-40 overflow-hidden bg-surface-2">
+    <Link href={`/peaks/${peak.slug}`} className="group block">
+      <div className="topo-texture relative aspect-[4/3] overflow-hidden rounded-xl bg-surface-2">
         {imageUrl ? (
           <img
             src={imageUrl}
             alt={peak.name}
             loading="lazy"
             decoding="async"
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
           />
         ) : (
           <div className="flex h-full items-center justify-center bg-gradient-to-br from-surface-2 to-surface-3">
@@ -48,69 +64,45 @@ export default function PeakCard({
           </div>
         )}
 
-        <div className="absolute right-3 top-3 flex gap-1.5">
-          {summited && (
-            <span className="rounded-full bg-[#e8b33a] px-2.5 py-0.5 text-xs font-bold text-[#3d2c00] shadow-lg">
-              ✓ Summited
-            </span>
-          )}
-          {peak.category === "highpoint" && !summited && (
-            <span className="rounded-full bg-[#e8b33a] px-2.5 py-0.5 text-xs font-bold text-[#3d2c00] shadow-lg">
-              🥇 {CATEGORY_LABEL.highpoint}
-            </span>
-          )}
-        </div>
-
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-surface via-surface/70 to-transparent p-3 pt-10">
-          <span
-            className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${difficultyClasses(peak.difficulty)}`}
-          >
-            {DIFFICULTY_LABEL[peak.difficulty]}
+        {(summited || peak.category === "highpoint") && (
+          <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-ink shadow-sm">
+            {summited ? "✓ Summited" : `🥇 ${CATEGORY_LABEL.highpoint}`}
           </span>
-        </div>
+        )}
       </div>
 
-      <div className="p-4">
-        <h3 className="truncate font-display text-lg font-bold text-ink">{peak.name}</h3>
-        <div className="mt-0.5 truncate text-sm text-ink-muted">
-          {[peak.range_name, peak.region, peak.country].filter(Boolean).join(" · ")}
-        </div>
+      <h3 className="mt-2.5 truncate font-semibold leading-snug text-ink group-hover:underline">
+        {peak.name}
+      </h3>
+      {place && <p className="truncate text-sm text-ink-muted">{place}</p>}
 
-        <div className="mt-3 flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-1.5">
-            <svg
-              className="h-4 w-4 text-pine-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 20l5.5-11L12 14l3-6 6 12H3z" />
-            </svg>
-            <span className="font-mono font-semibold text-ink">
-              {peak.elevation_m.toLocaleString()}m
+      {/* One row, middot-separated — the AllTrails metadata line. */}
+      <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-sm text-ink-muted">
+        <span className="font-medium text-ink">{peak.elevation_m.toLocaleString()} m</span>
+        <span aria-hidden>·</span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className={`h-2 w-2 shrink-0 rounded-full ${DIFFICULTY_DOT[peak.difficulty]}`} />
+          {DIFFICULTY_LABEL[peak.difficulty]}
+        </span>
+        {peak.prominence_m ? (
+          <>
+            <span aria-hidden>·</span>
+            <span>{peak.prominence_m.toLocaleString()} m prom</span>
+          </>
+        ) : null}
+        {peak.route_count ? (
+          <>
+            <span aria-hidden>·</span>
+            <span>
+              {peak.route_count} route{peak.route_count === 1 ? "" : "s"}
             </span>
-          </div>
-          {peak.prominence_m ? (
-            <div className="font-mono text-ink-faint">
-              {peak.prominence_m.toLocaleString()}m prom
-            </div>
-          ) : null}
-          {distance !== undefined && (
-            <div className="ml-auto font-mono text-ink-faint">
-              {distance < 1 ? `${Math.round(distance * 1000)}m` : `${distance.toFixed(1)}km`}
-            </div>
-          )}
-        </div>
-
-        {peak.route_count !== undefined && (
-          <div className="mt-3 border-t border-border pt-2.5 text-sm font-medium text-trail-500">
-            {peak.route_count > 0
-              ? `${peak.route_count} route${peak.route_count === 1 ? "" : "s"} to this summit →`
-              : peak.difficulty === "technical"
-                ? "A climb — no walking trail"
-                : "No mapped trail yet"}
-          </div>
+          </>
+        ) : null}
+        {distance !== undefined && (
+          <>
+            <span aria-hidden>·</span>
+            <span>{distance < 1 ? `${Math.round(distance * 1000)} m` : `${distance.toFixed(1)} km away`}</span>
+          </>
         )}
       </div>
     </Link>
