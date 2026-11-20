@@ -32,6 +32,7 @@ export default function PeakTerrain3D({
   peak,
   routes,
   activeRouteId,
+  focusRoute,
   onRouteHover,
   onProfile,
   className = "",
@@ -39,6 +40,16 @@ export default function PeakTerrain3D({
   peak: Peak;
   routes: PeakRoute[];
   activeRouteId?: number | null;
+  /**
+   * Fly to this route and frame it.
+   *
+   * Separate from `activeRouteId`, and carrying a nonce, for two reasons.
+   * The active route also changes on *hover* over the terrain, and moving
+   * the camera under a moving cursor is unusable. And picking the same
+   * route twice should re-frame it — a plain id would not change, so
+   * nothing would happen the second time.
+   */
+  focusRoute?: { id: number; nonce: number } | null;
   onRouteHover?: (id: number | null) => void;
   /** Profiles measured off the terrain, keyed by route id. */
   onProfile?: (profiles: Map<number, RouteProfile>) => void;
@@ -258,19 +269,57 @@ export default function PeakTerrain3D({
     m.setStyle(buildStyle(style, token));
   }, [style, ready, addTerrainAndRoutes]);
 
-  // --- highlight the active route ---
+  /**
+   * Highlight the active route.
+   *
+   * Width alone was not enough to answer "which of these is the one I just
+   * clicked?" — on a peak like Flattop with sixteen overlapping paths, a
+   * line two pixels thicker than its neighbours is not findable. So the
+   * chosen route also turns white and everything else fades back, which
+   * turns the question into one that needs no searching.
+   */
   useEffect(() => {
     const m = map.current;
     if (!m || !ready || !m.getLayer("routes-line")) return;
+    const isActive = ["==", ["get", "id"], activeRouteId ?? -1];
+    const hasActive = activeRouteId != null;
+
     m.setPaintProperty("routes-line", "line-width", [
       "interpolate",
       ["linear"],
       ["zoom"],
       10,
-      ["case", ["==", ["get", "id"], activeRouteId ?? -1], 4, 2],
+      ["case", isActive, 5, 2],
       16,
-      ["case", ["==", ["get", "id"], activeRouteId ?? -1], 8, 5],
+      ["case", isActive, 10, 4],
     ]);
+    m.setPaintProperty("routes-line", "line-color", [
+      "case",
+      isActive, "#ffffff",
+      ["==", ["get", "summit"], true], "#ffd34d",
+      "#8fd14f",
+    ]);
+    m.setPaintProperty("routes-line", "line-opacity", [
+      "case",
+      isActive, 1,
+      hasActive ? 0.35 : 1,
+    ]);
+    if (m.getLayer("routes-casing")) {
+      m.setPaintProperty("routes-casing", "line-opacity", [
+        "case",
+        isActive, 0.85,
+        hasActive ? 0.2 : 0.55,
+      ]);
+      m.setPaintProperty("routes-casing", "line-width", [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        10,
+        ["case", isActive, 9, 4],
+        16,
+        ["case", isActive, 16, 8],
+      ]);
+    }
   }, [activeRouteId, ready]);
 
   /**
@@ -335,6 +384,45 @@ export default function PeakTerrain3D({
       m.off("touchstart", stop);
     };
   }, [orbiting]);
+
+  /**
+   * Fly to one route when it is picked from the list.
+   *
+   * Framed together with the summit, deliberately: a route shown on its own
+   * tells you nothing about how far below the top it stops, which on 275 of
+   * these peaks is the whole story. Keeping the summit in shot makes the gap
+   * visible instead of something you have to read in the sidebar.
+   */
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready || !focusRoute) return;
+    const route = latest.current.routes.find((r) => r.id === focusRoute.id);
+    if (!route) return;
+
+    const b = new mapboxgl.LngLatBounds();
+    let any = false;
+    for (const line of decodeSegments(route.poly)) {
+      for (const c of line) {
+        b.extend(c as [number, number]);
+        any = true;
+      }
+    }
+    if (!any) return;
+    b.extend([latest.current.peak.longitude, latest.current.peak.latitude]);
+
+    // Stop orbiting first; an animation fighting the camera looks broken.
+    setOrbiting(false);
+    m.fitBounds(b, {
+      padding: { top: 90, bottom: 70, left: 60, right: 60 },
+      pitch: 62,
+      bearing: m.getBearing(),
+      duration: 1100,
+      maxZoom: 16,
+    });
+    // `nonce` is the dependency that matters — re-picking the same route
+    // should fly to it again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRoute?.nonce, focusRoute?.id, ready]);
 
   const frameRoutes = useCallback(() => {
     const m = map.current;

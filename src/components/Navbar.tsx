@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import SearchBar from "./SearchBar";
@@ -16,17 +16,28 @@ const navItems = [
   { href: "/profile", label: "Profile", icon: UserIcon },
 ];
 
-// Secondary destinations — desktop nav only, to keep the mobile tab bar to six.
+/**
+ * Secondary destinations, behind a "More" menu on desktop.
+ *
+ * These used to sit in the bar as three bare text links. With six primary
+ * items, a search field and a sign-out button already competing for the
+ * row, they left nothing any element could give up: the labels ran into
+ * each other and "Sign Out" wrapped onto two lines. Folding them into a
+ * menu gives the whole bar its spacing back and costs one click on the
+ * three pages visited least.
+ */
 const secondaryItems = [
-  { href: "/activities", label: "Activities" },
-  { href: "/downloads", label: "Downloads" },
-  { href: "/logbook", label: "Logbook" },
+  { href: "/activities", label: "Activities", icon: ActivityIcon },
+  { href: "/downloads", label: "Downloads", icon: DownloadIcon },
+  { href: "/logbook", label: "Logbook", icon: BookIcon },
 ];
 
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
   useEffect(() => {
@@ -36,6 +47,23 @@ export default function Navbar() {
     );
     return () => subscription.unsubscribe();
   }, []);
+
+  // Close the More menu on an outside click or Escape — a menu you can only
+  // dismiss by picking something from it is a trap.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -58,61 +86,98 @@ export default function Navbar() {
 
       {/* Desktop top nav */}
       <nav className="fixed top-0 left-0 right-0 z-50 hidden border-b border-slate-800 bg-slate-950/80 backdrop-blur-xl md:block">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 lg:gap-4">
           <Link href="/" className="flex shrink-0 items-center gap-2">
             <span className="text-2xl">⛰</span>
-            <span className="font-display text-lg font-bold tracking-tight text-ink">
+            <span className="hidden font-display text-lg font-bold tracking-tight text-ink lg:inline">
               All Mountains
             </span>
           </Link>
 
-          <SearchBar className="mx-4 w-full max-w-xs" />
+          {/* Takes the slack so the nav never has to. min-w-0 lets it
+              actually shrink instead of forcing the row wider. */}
+          <SearchBar className="min-w-0 flex-1 lg:max-w-xs" />
 
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-0.5">
             {navItems.map(({ href, label, icon: Icon }) => {
               const active = pathname.startsWith(href);
               return (
                 <Link
                   key={href}
                   href={href}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors ${
+                  title={label}
+                  className={`flex items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium transition-colors xl:px-2.5 ${
                     active
                       ? "bg-alpine-500/10 text-alpine-600"
                       : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
                   }`}
                 >
-                  <Icon className="h-4 w-4" />
-                  <span>{label}</span>
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {/* Labels drop below xl rather than letting every item
+                      squeeze: six icons stay legible, six crushed words
+                      do not. */}
+                  <span className="hidden xl:inline">{label}</span>
                 </Link>
               );
             })}
           </div>
 
-          <div className="flex items-center gap-3">
-            {secondaryItems.map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className={`hidden text-sm font-medium transition-colors lg:block ${
-                  pathname.startsWith(href)
-                    ? "text-alpine-600"
-                    : "text-slate-400 hover:text-slate-200"
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setMenuOpen((o) => !o)}
+                aria-expanded={menuOpen}
+                aria-haspopup="menu"
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors ${
+                  secondaryItems.some((i) => pathname.startsWith(i.href))
+                    ? "bg-alpine-500/10 text-alpine-600"
+                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
                 }`}
               >
-                {label}
-              </Link>
-            ))}
+                <span>More</span>
+                <ChevronIcon className={`h-3.5 w-3.5 transition-transform ${menuOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {menuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-xl border border-slate-800 bg-slate-950/95 py-1 shadow-xl shadow-black/40 backdrop-blur-xl"
+                >
+                  {secondaryItems.map(({ href, label, icon: Icon }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      role="menuitem"
+                      // Closed here rather than in an effect on `pathname`:
+                      // the menu must not be left hanging open over the page
+                      // it just navigated to.
+                      onClick={() => setMenuOpen(false)}
+                      className={`flex items-center gap-2.5 px-3 py-2 text-sm font-medium transition-colors ${
+                        pathname.startsWith(href)
+                          ? "bg-alpine-500/10 text-alpine-600"
+                          : "text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      {label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {user ? (
               <button
                 onClick={handleSignOut}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+                className="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
               >
                 Sign Out
               </button>
             ) : (
               <Link
                 href="/login"
-                className="rounded-lg bg-alpine-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-alpine-500"
+                className="whitespace-nowrap rounded-lg bg-alpine-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-alpine-500"
               >
                 Sign In
               </Link>
@@ -198,6 +263,30 @@ function UserIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+    </svg>
+  );
+}
+
+function ActivityIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13h3l2.5-6 4 13 3-9 1.8 4H21" />
+    </svg>
+  );
+}
+
+function DownloadIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
     </svg>
   );
 }

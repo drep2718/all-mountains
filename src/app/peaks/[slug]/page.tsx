@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -55,6 +55,9 @@ export default function PeakPage() {
   /** Measured off the terrain model by the 3-D view, keyed by route id. */
   const [profiles, setProfiles] = useState<Map<number, RouteProfile>>(new Map());
   const [selectedRoute, setSelectedRoute] = useState<number | null>(null);
+  /** Bumped on an explicit pick, so the 3D view knows to fly there. */
+  const [focusRoute, setFocusRoute] = useState<{ id: number; nonce: number } | null>(null);
+  const terrainRef = useRef<HTMLElement>(null);
   const [weather, setWeather] = useState<{ tempC: number; windKph: number; code: number } | null>(
     null
   );
@@ -214,6 +217,22 @@ export default function PeakPage() {
   const ordered = [...summitRoutes, ...approachRoutes];
   const coverage = routeCoverage(routes);
   const activeId = selectedRoute ?? ordered[0]?.id ?? null;
+
+  /**
+   * Pick a route: highlight it, and tell the 3D view to fly to it.
+   *
+   * The nonce is what makes picking the same route twice work — the id
+   * alone would not change, so the second click would do nothing. Hovering
+   * the terrain still only sets `selectedRoute`, never this, because moving
+   * the camera under the cursor makes the map impossible to use.
+   */
+  const pickRoute = (id: number) => {
+    setSelectedRoute(id);
+    setFocusRoute((f) => ({ id, nonce: (f?.nonce ?? 0) + 1 }));
+    // On a phone the list sits below the fold, so a fly-to the reader
+    // cannot see is no feedback at all.
+    terrainRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  };
   const activeRoute = ordered.find((r) => r.id === activeId) ?? null;
   const activeProfile = activeId != null ? (profiles.get(activeId) ?? null) : null;
 
@@ -273,7 +292,7 @@ export default function PeakPage() {
 
       {/* The mountain itself */}
       {typeof window !== "undefined" && (
-        <section className="mt-5">
+        <section className="mt-5" ref={terrainRef}>
           <div className="mb-2 flex items-baseline justify-between">
             <h2 className="font-display text-lg font-bold text-ink">The mountain in 3D</h2>
             <span className="text-xs text-ink-faint">
@@ -284,6 +303,7 @@ export default function PeakPage() {
             peak={peak}
             routes={routes}
             activeRouteId={activeId}
+            focusRoute={focusRoute}
             onRouteHover={(id) => id != null && setSelectedRoute(id)}
             onProfile={setProfiles}
             className="h-[22rem] sm:h-[30rem]"
@@ -369,7 +389,7 @@ export default function PeakPage() {
                   difficulty={peak.difficulty}
                   summitElevationM={peak.elevation_m}
                   selected={r.id === activeId}
-                  onSelect={() => setSelectedRoute(r.id)}
+                  onSelect={() => pickRoute(r.id)}
                 />
               ))}
             </div>
