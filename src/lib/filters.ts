@@ -74,3 +74,80 @@ export function routeMatches(
   }
   return true;
 }
+
+// --- URL round-tripping ----------------------------------------------------
+
+/**
+ * Filters, compact enough to live in a query string.
+ *
+ * The browse pages keep their state in the URL so that pressing back after
+ * opening a result returns you to the list you were looking at, rather than
+ * to an unfiltered one. The filter sheet has to travel with the rest of it,
+ * or back restores your search and silently drops your filters — which is
+ * worse than losing both, because the page then looks right and is not.
+ *
+ * Encoded as `a.b.c` lists joined by `-`, skipping anything left at its
+ * default, so a lightly filtered list keeps a short and readable URL.
+ */
+export function encodeFilters(f: Filters): string {
+  const parts: string[] = [];
+  if (f.difficulty.length) parts.push(`d.${f.difficulty.join(".")}`);
+  if (f.routeType.length) parts.push(`t.${f.routeType.map((s) => s.replace(/\s+/g, "_")).join(".")}`);
+  if (f.activities.length) parts.push(`a.${f.activities.map((s) => s.replace(/\s+/g, "_")).join(".")}`);
+  if (f.features.length) parts.push(`f.${f.features.map((s) => s.replace(/\s+/g, "_")).join(".")}`);
+  if (f.lengthMin > 0) parts.push(`lo.${f.lengthMin}`);
+  if (f.lengthMax < LENGTH_CAP) parts.push(`hi.${f.lengthMax}`);
+  if (f.iconicOnly) parts.push("ic.1");
+  return parts.join("-");
+}
+
+/** Inverse of `encodeFilters`. Unknown or malformed parts are ignored. */
+export function decodeFilters(raw: string): Filters {
+  const out: Filters = {
+    ...DEFAULT_FILTERS,
+    difficulty: [],
+    routeType: [],
+    activities: [],
+    features: [],
+  };
+  if (!raw) return out;
+
+  for (const part of raw.split("-")) {
+    const [tag, ...rest] = part.split(".");
+    const values = rest.filter(Boolean).map((s) => s.replace(/_/g, " "));
+    switch (tag) {
+      case "d":
+        // Only grades the catalogue actually uses; a hand-edited URL must
+        // not put an unknown value into a query.
+        out.difficulty = values.filter((v): v is PeakDifficulty =>
+          (DIFFICULTIES as string[]).includes(v)
+        );
+        break;
+      case "t":
+        out.routeType = values.filter((v) => ROUTE_TYPES.includes(v));
+        break;
+      case "a":
+        out.activities = values;
+        break;
+      case "f":
+        out.features = values;
+        break;
+      case "lo": {
+        const n = Number(rest[0]);
+        if (Number.isFinite(n) && n >= 0) out.lengthMin = Math.min(n, LENGTH_CAP);
+        break;
+      }
+      case "hi": {
+        const n = Number(rest[0]);
+        if (Number.isFinite(n) && n > 0) out.lengthMax = Math.min(n, LENGTH_CAP);
+        break;
+      }
+      case "ic":
+        out.iconicOnly = rest[0] === "1";
+        break;
+    }
+  }
+  // A reversed range matches nothing and reads as a bug in the page.
+  if (out.lengthMin > out.lengthMax) out.lengthMin = 0;
+  return out;
+}

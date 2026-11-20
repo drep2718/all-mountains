@@ -82,3 +82,37 @@ export async function reverseGeocode(lat: number, lng: number): Promise<PlaceCon
   }
   return out;
 }
+
+// --- URL round-tripping ----------------------------------------------------
+
+/**
+ * A searched place, compact enough to live in a query string.
+ *
+ * The list pages keep their filters in the URL so the back button restores
+ * them, and the place filter has to go too — coming back to "peaks near
+ * Chamonix" and getting every peak on earth is the bug being fixed. Encoded
+ * as `name~minLng,minLat,maxLng,maxLat` with the centre appended, rather
+ * than as JSON, because a URL full of `%7B%22name%22%3A` is unreadable and
+ * unshareable.
+ */
+export function encodePlace(p: GeocodeResult): string {
+  const nums = [...p.center, ...(p.bbox ?? [])].map((n) => n.toFixed(5)).join(",");
+  // `~` is legal unencoded in a query value and does not appear in place names.
+  return `${p.name.replace(/~/g, "-")}~${nums}`;
+}
+
+/** Inverse of `encodePlace`. Returns null for anything malformed. */
+export function decodePlace(raw: string): GeocodeResult | null {
+  const cut = raw.lastIndexOf("~");
+  if (cut <= 0) return null;
+  const name = raw.slice(0, cut);
+  const nums = raw
+    .slice(cut + 1)
+    .split(",")
+    .map(Number);
+  if (nums.length < 2 || nums.some((n) => !Number.isFinite(n))) return null;
+  const center: [number, number] = [nums[0], nums[1]];
+  const bbox =
+    nums.length >= 6 ? ([nums[2], nums[3], nums[4], nums[5]] as [number, number, number, number]) : null;
+  return { name, center, bbox };
+}

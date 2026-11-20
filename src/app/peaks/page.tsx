@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import PeakCard from "@/components/PeakCard";
 import LocationSearch from "@/components/LocationSearch";
-import type { GeocodeResult } from "@/lib/geocode";
+import { decodePlace, encodePlace, type GeocodeResult } from "@/lib/geocode";
+import { useUrlState } from "@/lib/useUrlState";
 import type { Peak, PeakDifficulty, PeakCategory } from "@/lib/peak-types";
 import { DIFFICULTY_LABEL } from "@/lib/peak-types";
 
@@ -12,20 +13,48 @@ import { DIFFICULTY_LABEL } from "@/lib/peak-types";
 // derived from elevation — which used to call every 800 m scramble "Easy".
 const difficulties: PeakDifficulty[] = ["hike", "scramble", "technical"];
 
+/**
+ * Defaults, and by the same token the shape of the URL.
+ *
+ * A value equal to its default is left out of the query string, so a plain
+ * browse stays at `/peaks` and only what you actually changed shows up.
+ * `radius` is inverted (`noRadius`) for that reason: the filter is on by
+ * default, and encoding the common case would put `radius=1` in every URL.
+ */
+const FILTER_DEFAULTS = {
+  q: "",
+  difficulty: "All",
+  iconic: false,
+  sort: "popular",
+  place: "",
+  noRadius: false,
+  page: 0,
+};
+
 export default function PeaksPage() {
   const [peaks, setPeaks] = useState<Peak[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [difficulty, setDifficulty] = useState<PeakDifficulty | "All">("All");
-  const [iconicOnly, setIconicOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<"popular" | "elevation" | "name">("popular");
-  const [place, setPlace] = useState<GeocodeResult | null>(null);
-  const [radiusOn, setRadiusOn] = useState(true);
-  const [page, setPage] = useState(0);
+  const { state, set, reset, ready } = useUrlState(FILTER_DEFAULTS);
+
+  const search = state.q;
+  const difficulty = state.difficulty as PeakDifficulty | "All";
+  const iconicOnly = state.iconic;
+  const sortBy = state.sort as "popular" | "elevation" | "name";
+  const radiusOn = !state.noRadius;
+  const page = state.page;
+  const place = useMemo<GeocodeResult | null>(
+    () => (state.place ? decodePlace(state.place) : null),
+    [state.place]
+  );
+
   const supabase = createClient();
   const pageSize = 24;
 
   useEffect(() => {
+    // Hold until the URL has been read, or the first paint fires a query
+    // against the defaults and visibly discards the restored filters.
+    if (!ready) return;
+
     async function fetch() {
       setLoading(true);
 
@@ -83,7 +112,7 @@ export default function PeaksPage() {
 
     const debounce = setTimeout(fetch, search ? 300 : 0);
     return () => clearTimeout(debounce);
-  }, [search, difficulty, iconicOnly, sortBy, place, radiusOn, page]);
+  }, [search, difficulty, iconicOnly, sortBy, place, radiusOn, page, ready]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -99,7 +128,7 @@ export default function PeaksPage() {
         <div className="w-full sm:w-64">
           <LocationSearch
             selected={place}
-            onSelect={(p) => { setPlace(p); setPage(0); }}
+            onSelect={(p) => set({ place: p ? encodePlace(p) : "", page: 0 })}
             placeholder="Search a mountain or place..."
           />
         </div>
@@ -117,7 +146,7 @@ export default function PeaksPage() {
           <input
             type="text"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            onChange={(e) => set({ q: e.target.value, page: 0 })}
             placeholder="Search peaks..."
             className="w-full rounded-xl border border-slate-700 bg-slate-900 py-2.5 pl-10 pr-4 text-sm text-slate-100 placeholder-slate-500 outline-none transition-colors focus:border-alpine-500"
           />
@@ -127,7 +156,7 @@ export default function PeaksPage() {
           {(["All", ...difficulties] as const).map((d) => (
             <button
               key={d}
-              onClick={() => { setDifficulty(d as PeakDifficulty | "All"); setPage(0); }}
+              onClick={() => set({ difficulty: d, page: 0 })}
               className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                 difficulty === d
                   ? "bg-alpine-600 text-white"
@@ -140,7 +169,7 @@ export default function PeaksPage() {
         </div>
 
         <button
-          onClick={() => { setIconicOnly((v) => !v); setPage(0); }}
+          onClick={() => set({ iconic: !iconicOnly, page: 0 })}
           className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium transition-colors ${
             iconicOnly ? "border-[#e8b33a] bg-[#e8b33a]/15 text-[#e8b33a]" : "border-slate-700 bg-slate-900 text-slate-300 hover:text-slate-100"
           }`}
@@ -150,7 +179,7 @@ export default function PeaksPage() {
 
         <select
           value={sortBy}
-          onChange={(e) => { setSortBy(e.target.value as "popular" | "elevation" | "name"); setPage(0); }}
+          onChange={(e) => set({ sort: e.target.value, page: 0 })}
           className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-slate-300 outline-none"
         >
           <option value="popular">Most popular</option>
@@ -168,7 +197,7 @@ export default function PeaksPage() {
           </span>
           <button
             type="button"
-            onClick={() => { setRadiusOn((v) => !v); setPage(0); }}
+            onClick={() => set({ noRadius: radiusOn, page: 0 })}
             role="switch"
             aria-checked={radiusOn}
             className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
@@ -187,8 +216,17 @@ export default function PeaksPage() {
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-700 border-t-alpine-500" />
         </div>
       ) : peaks.length === 0 ? (
-        <div className="py-20 text-center text-slate-500">
-          No peaks found. Try a different search or filter.
+        <div className="py-20 text-center">
+          <p className="text-slate-500">No peaks found. Try a different search or filter.</p>
+          {/* Now that filters persist across navigation, they can also follow
+              you back from a shared link — so there has to be one obvious way
+              out of a combination that matches nothing. */}
+          <button
+            onClick={reset}
+            className="mt-4 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-100"
+          >
+            Clear all filters
+          </button>
         </div>
       ) : (
         <>
@@ -201,7 +239,7 @@ export default function PeaksPage() {
           {/* Pagination */}
           <div className="mt-8 flex items-center justify-center gap-4">
             <button
-              onClick={() => setPage(Math.max(0, page - 1))}
+              onClick={() => set({ page: Math.max(0, page - 1) })}
               disabled={page === 0}
               className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-30"
             >
@@ -209,7 +247,7 @@ export default function PeaksPage() {
             </button>
             <span className="text-sm text-slate-400">Page {page + 1}</span>
             <button
-              onClick={() => setPage(page + 1)}
+              onClick={() => set({ page: page + 1 })}
               disabled={peaks.length < pageSize}
               className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-30"
             >

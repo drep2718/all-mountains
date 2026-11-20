@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import RouteCard from "@/components/RouteCard";
 import FilterSheet from "@/components/FilterSheet";
 import LocationSearch from "@/components/LocationSearch";
 import type { PeakRoute as Route } from "@/lib/peak-types";
-import { type Filters, DEFAULT_FILTERS, applyRouteFilters, activeFilterCount } from "@/lib/filters";
-import type { GeocodeResult } from "@/lib/geocode";
+import { type Filters, applyRouteFilters, activeFilterCount, decodeFilters, encodeFilters } from "@/lib/filters";
+import { decodePlace, encodePlace, type GeocodeResult } from "@/lib/geocode";
+import { useUrlState } from "@/lib/useUrlState";
 
 const supabase = createClient();
 const PAGE_SIZE = 24;
@@ -37,24 +38,34 @@ async function fetchRoutes(
   return (data ?? []) as Route[];
 }
 
+/** Defaults, and so the shape of the URL — see `useUrlState`. */
+const FILTER_DEFAULTS = { q: "", f: "", place: "", noRadius: false, sort: "popular", page: 0 };
+
 export default function RoutesBrowsePage() {
-  const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
-  const [place, setPlace] = useState<GeocodeResult | null>(null);
-  const [radiusOn, setRadiusOn] = useState(true);
-  const [sortBy, setSortBy] = useState("popular");
-  const [page, setPage] = useState(0);
+  const { state, set, ready } = useUrlState(FILTER_DEFAULTS);
   const [filterOpen, setFilterOpen] = useState(false);
+
+  const search = state.q;
+  const sortBy = state.sort;
+  const radiusOn = !state.noRadius;
+  const page = state.page;
+  const filters = useMemo<Filters>(() => decodeFilters(state.f), [state.f]);
+  const place = useMemo<GeocodeResult | null>(
+    () => (state.place ? decodePlace(state.place) : null),
+    [state.place]
+  );
 
   // React Query caches each unique combination — revisiting is instant.
   const { data: routes = [], isLoading, error, refetch } = useQuery({
-    queryKey: ["routes", search, filters, place?.name ?? null, radiusOn, sortBy, page],
+    queryKey: ["routes", search, state.f, state.place, radiusOn, sortBy, page],
     queryFn: () => fetchRoutes(search, filters, place, radiusOn, sortBy, page),
     placeholderData: (prev) => prev, // keep old results visible while refetching
+    // Wait for the URL to be read, or the first query runs against the
+    // defaults and the restored filters flash away.
+    enabled: ready,
   });
 
   const nFilters = activeFilterCount(filters);
-  const reset = (patch: () => void) => { patch(); setPage(0); };
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -64,7 +75,10 @@ export default function RoutesBrowsePage() {
       {/* Controls row */}
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="sm:w-72">
-          <LocationSearch selected={place} onSelect={(p) => reset(() => setPlace(p))} />
+          <LocationSearch
+            selected={place}
+            onSelect={(p) => set({ place: p ? encodePlace(p) : "", page: 0 })}
+          />
         </div>
 
         <div className="relative flex-1">
@@ -72,7 +86,7 @@ export default function RoutesBrowsePage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
           </svg>
           <input type="text" value={search}
-            onChange={(e) => reset(() => setSearch(e.target.value))}
+            onChange={(e) => set({ q: e.target.value, page: 0 })}
             placeholder="Search trails by name..."
             className="w-full rounded-xl border border-border bg-surface py-2.5 pl-10 pr-4 text-sm text-ink placeholder-ink-faint outline-none focus:border-pine-500" />
         </div>
@@ -86,7 +100,7 @@ export default function RoutesBrowsePage() {
           {nFilters > 0 && <span className="rounded-full bg-pine-500 px-1.5 text-xs font-semibold text-white">{nFilters}</span>}
         </button>
 
-        <select value={sortBy} onChange={(e) => reset(() => setSortBy(e.target.value))}
+        <select value={sortBy} onChange={(e) => set({ sort: e.target.value, page: 0 })}
           className="rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-ink-muted outline-none">
           <option value="popular">Closest to summit</option>
           <option value="distance_km">Longest</option>
@@ -103,7 +117,7 @@ export default function RoutesBrowsePage() {
           </span>
           <button
             type="button"
-            onClick={() => reset(() => setRadiusOn((v) => !v))}
+            onClick={() => set({ noRadius: radiusOn, page: 0 })}
             role="switch"
             aria-checked={radiusOn}
             className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
@@ -133,17 +147,17 @@ export default function RoutesBrowsePage() {
             {routes.map((r) => <RouteCard key={r.id} route={r} />)}
           </div>
           <div className="mt-8 flex items-center justify-center gap-4">
-            <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
+            <button onClick={() => set({ page: Math.max(0, page - 1) })} disabled={page === 0}
               className="rounded-lg border border-border px-4 py-2 text-sm text-ink-muted transition-colors hover:bg-surface disabled:opacity-30">Previous</button>
             <span className="text-sm text-ink-muted">Page {page + 1}</span>
-            <button onClick={() => setPage(page + 1)} disabled={routes.length < PAGE_SIZE}
+            <button onClick={() => set({ page: page + 1 })} disabled={routes.length < PAGE_SIZE}
               className="rounded-lg border border-border px-4 py-2 text-sm text-ink-muted transition-colors hover:bg-surface disabled:opacity-30">Next</button>
           </div>
         </>
       )}
 
       <FilterSheet open={filterOpen} filters={filters}
-        onChange={(f) => reset(() => setFilters(f))}
+        onChange={(f) => set({ f: encodeFilters(f), page: 0 })}
         onClose={() => setFilterOpen(false)}
         resultCount={routes.length} />
     </div>
