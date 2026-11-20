@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isOneWayGeometry, tripFigures } from "@/lib/trip";
+import { describeTripDistance, isOneWayGeometry, tripFigures } from "@/lib/trip";
 
 const base = {
   routeType: "Out & Back",
@@ -90,5 +90,32 @@ describe("tripFigures", () => {
       difficulty: "hike",
     });
     expect(there.minutes!).toBeGreaterThan(oneWay.minutes!);
+  });
+});
+
+describe("describeTripDistance", () => {
+  it("gives both numbers for an out-and-back, never just one", () => {
+    const d = describeTripDistance(tripFigures(base));
+    expect(d.primary).toBe("9.4 km round trip");
+    expect(d.secondary).toBe("4.7 km each way");
+  });
+
+  it("gives one number when there is only one to give", () => {
+    const d = describeTripDistance(tripFigures({ ...base, routeType: "Loop", descentM: 1700 }));
+    expect(d.primary).toBe("4.7 km");
+    expect(d.secondary).toBeNull();
+  });
+
+  it("switches to metres below a kilometre, on both halves", () => {
+    const d = describeTripDistance(
+      tripFigures({ ...base, distanceKm: 0.4, ascentM: 60, descentM: 0 })
+    );
+    expect(d.primary).toBe("800 m round trip");
+    expect(d.secondary).toBe("400 m each way");
+  });
+
+  it("says nothing rather than guessing when the distance is unknown", () => {
+    const d = describeTripDistance(tripFigures({ ...base, distanceKm: null, ascentM: null }));
+    expect(d.primary).toBe("—");
   });
 });

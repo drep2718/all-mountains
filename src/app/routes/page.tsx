@@ -18,9 +18,15 @@ const PAGE_SIZE = 24;
 // the summit. Popularity uses real summit access, never the deleted join table.
 async function fetchRoutes(
   search: string, filters: Filters, place: GeocodeResult | null,
-  radiusOn: boolean, sortBy: string, page: number
+  radiusOn: boolean, sortBy: string, page: number, summitOnly: boolean
 ): Promise<Route[]> {
   let q = applyRouteFilters(supabase.from("routes").select("*, peak:peaks!inner(category,difficulty)"), filters);
+  // This is a catalogue of mountains, so the default list is the routes
+  // that climb one. Of 8,703 mapped lines only 1,663 reach a summit; the
+  // rest are valley paths and connectors that happen to pass nearby, and
+  // leaving them in by default made the page a list of walks near peaks
+  // rather than ways up them.
+  if (summitOnly) q = q.eq("is_summit_route", true);
   if (search.trim()) q = q.ilike("name", `%${search.trim()}%`);
   if (place?.bbox && radiusOn) {
     const [minLng, minLat, maxLng, maxLat] = place.bbox;
@@ -39,7 +45,7 @@ async function fetchRoutes(
 }
 
 /** Defaults, and so the shape of the URL — see `useUrlState`. */
-const FILTER_DEFAULTS = { q: "", f: "", place: "", noRadius: false, sort: "popular", page: 0 };
+const FILTER_DEFAULTS = { q: "", f: "", place: "", noRadius: false, sort: "popular", page: 0, all: false };
 
 export default function RoutesBrowsePage() {
   const { state, set, ready } = useUrlState(FILTER_DEFAULTS);
@@ -49,6 +55,7 @@ export default function RoutesBrowsePage() {
   const sortBy = state.sort;
   const radiusOn = !state.noRadius;
   const page = state.page;
+  const summitOnly = !state.all;
   const filters = useMemo<Filters>(() => decodeFilters(state.f), [state.f]);
   const place = useMemo<GeocodeResult | null>(
     () => (state.place ? decodePlace(state.place) : null),
@@ -57,8 +64,8 @@ export default function RoutesBrowsePage() {
 
   // React Query caches each unique combination — revisiting is instant.
   const { data: routes = [], isLoading, error, refetch } = useQuery({
-    queryKey: ["routes", search, state.f, state.place, radiusOn, sortBy, page],
-    queryFn: () => fetchRoutes(search, filters, place, radiusOn, sortBy, page),
+    queryKey: ["routes", search, state.f, state.place, radiusOn, sortBy, page, summitOnly],
+    queryFn: () => fetchRoutes(search, filters, place, radiusOn, sortBy, page, summitOnly),
     placeholderData: (prev) => prev, // keep old results visible while refetching
     // Wait for the URL to be read, or the first query runs against the
     // defaults and the restored filters flash away.
@@ -69,8 +76,14 @@ export default function RoutesBrowsePage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
-      <h1 className="font-display text-3xl font-extrabold text-ink">Trails & Routes</h1>
-      <p className="mt-2 text-ink-muted">Mapped routes to the mountains in the catalogue</p>
+      <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink">
+        Routes to the summit
+      </h1>
+      <p className="mt-2 text-ink-muted">
+        {summitOnly
+          ? "Mapped lines that reach the top of a peak in the catalogue"
+          : "Every mapped path near a peak, including those that stop below the top"}
+      </p>
 
       {/* Controls row */}
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -98,6 +111,27 @@ export default function RoutesBrowsePage() {
           </svg>
           Filters
           {nFilters > 0 && <span className="rounded-full bg-pine-500 px-1.5 text-xs font-semibold text-white">{nFilters}</span>}
+        </button>
+
+        {/*
+          The summit filter is on by default, so it has to be visible and
+          obviously switchable. A default that silently hides 81% of the
+          table is a bug; a default you can see and turn off is a point of
+          view about what this catalogue is for.
+        */}
+        <button
+          type="button"
+          onClick={() => set({ all: summitOnly, page: 0 })}
+          role="switch"
+          aria-checked={summitOnly}
+          className={`flex items-center gap-2 whitespace-nowrap rounded-xl border px-3.5 py-2.5 text-sm font-medium transition-colors ${
+            summitOnly
+              ? "border-pine-600 bg-pine-500/10 text-pine-700"
+              : "border-border bg-surface text-ink-muted hover:text-ink"
+          }`}
+        >
+          <span className={`h-2 w-2 shrink-0 rounded-full ${summitOnly ? "bg-pine-500" : "bg-ink-faint"}`} />
+          Reaches the summit
         </button>
 
         <select value={sortBy} onChange={(e) => set({ sort: e.target.value, page: 0 })}

@@ -106,3 +106,30 @@ export function tripFigures(args: {
     oneWayKm,
   };
 }
+
+const km = (n: number): string => (n < 1 ? `${Math.round(n * 1000)} m` : `${n.toFixed(1)} km`);
+
+/**
+ * Both distances, always, for a trip that is walked in both directions.
+ *
+ * Giving one number and a word was not enough. "9.5 km round trip" leaves
+ * the reader to halve it to work out how far up the mountain they have to
+ * get, and "4.7 km" alone caused the original bug report. A climber plans
+ * against both: the one-way figure is the climb and where the turnaround
+ * time applies, the round-trip figure is the day.
+ */
+export function describeTripDistance(trip: TripFigures): {
+  /** The headline — total ground covered. */
+  primary: string;
+  /** The other half of the picture, or null when there is only one. */
+  secondary: string | null;
+} {
+  if (trip.distanceKm == null) return { primary: "—", secondary: null };
+  if (!trip.roundTrip || trip.oneWayKm == null) {
+    return { primary: km(trip.distanceKm), secondary: null };
+  }
+  return {
+    primary: `${km(trip.distanceKm)} round trip`,
+    secondary: `${km(trip.oneWayKm)} each way`,
+  };
+}

@@ -20,7 +20,7 @@ import {
 } from "@/lib/peak-types";
 import { getPeakDownload } from "@/lib/offline";
 import { coverageNotice, describeSummitGap, routeCoverage } from "@/lib/summit-gap";
-import { tripFigures } from "@/lib/trip";
+import { describeTripDistance, tripFigures } from "@/lib/trip";
 import dynamic from "next/dynamic";
 import PeakGallery from "@/components/PeakGallery";
 import RouteProfileChart from "@/components/RouteProfileChart";
@@ -228,11 +228,18 @@ export default function PeakPage() {
    * the camera under the cursor makes the map impossible to use.
    */
   /**
-   * The figures that go in the header: the route someone would actually
-   * take, which is the first in the ordered list — summit routes first,
-   * then nearest approach.
+   * The figures in the header come from a route that reaches the top, or
+   * from nothing at all.
+   *
+   * This used to take the first of the ordered list, which falls through
+   * to an approach trail on the 275 peaks that have no summit route — so
+   * Flattop Mountain advertised "Elevation gain 52 m · Est. 15–20 min"
+   * under its name, which is the Blueberry Knoll loop at the bottom, not
+   * the mountain. A number describing a walk near a peak, printed where
+   * the reader expects the climb, is worse than no number: the coverage
+   * notice below already says plainly that nothing mapped reaches the top.
    */
-  const headlineRoute = ordered[0] ?? null;
+  const headlineRoute = summitRoutes[0] ?? null;
   const headline = headlineRoute
     ? tripFigures({
         routeType: headlineRoute.route_type,
@@ -354,6 +361,13 @@ export default function PeakPage() {
                 unit="km"
                 label={headline.roundTrip ? "Round trip" : "Length"}
               />
+              {headline.roundTrip && headline.oneWayKm != null && (
+                <Stat
+                  value={formatDistance(headline.oneWayKm).replace(/\s*km$/, "")}
+                  unit="km"
+                  label="One way"
+                />
+              )}
               {headline.ascentM != null && (
                 <Stat
                   value={headline.ascentM.toLocaleString()}
@@ -426,8 +440,11 @@ export default function PeakPage() {
       <section className="mt-6">
         <h2 className="mb-3 font-display text-lg font-bold text-ink">
           Routes to the summit
-          {routes.length > 0 && (
-            <span className="ml-2 text-sm font-normal text-ink-faint">{routes.length}</span>
+          {/* Counts the routes that reach it, not every line near the
+              mountain — "Routes to the summit 16" beside sixteen trails
+              that all stop short was a claim the page then contradicted. */}
+          {summitRoutes.length > 0 && (
+            <span className="ml-2 text-sm font-normal text-ink-faint">{summitRoutes.length}</span>
           )}
         </h2>
 
@@ -455,20 +472,61 @@ export default function PeakPage() {
               </div>
             )}
 
-            <div className="space-y-2">
-              {ordered.map((r) => (
-                <RouteRow
-                  key={r.id}
-                  route={r}
-                  peakSlug={peak.slug}
-                  profile={profiles.get(r.id) ?? null}
-                  difficulty={peak.difficulty}
-                  summitElevationM={peak.elevation_m}
-                  selected={r.id === activeId}
-                  onSelect={() => pickRoute(r.id)}
-                />
-              ))}
-            </div>
+            {/*
+              The two groups are separated structurally, not by a badge on
+              a row in one long list. A path that stops 998 m below the
+              summit is not a worse way up this mountain, it is not a way
+              up this mountain, and putting it under the same heading as
+              the climb invites exactly that reading. Mount Juneau listed
+              the Gold Creek Flume — a valley walk — directly beneath the
+              trail that climbs 844 m to the top.
+            */}
+            {summitRoutes.length > 0 && (
+              <div className="space-y-2">
+                {summitRoutes.map((r) => (
+                  <RouteRow
+                    key={r.id}
+                    route={r}
+                    peakSlug={peak.slug}
+                    profile={profiles.get(r.id) ?? null}
+                    difficulty={peak.difficulty}
+                    summitElevationM={peak.elevation_m}
+                    selected={r.id === activeId}
+                    onSelect={() => pickRoute(r.id)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {approachRoutes.length > 0 && (
+              <div className={summitRoutes.length > 0 ? "mt-6" : ""}>
+                <h3 className="mb-1 font-display text-base font-bold text-ink">
+                  Other trails on this mountain
+                  <span className="ml-2 text-sm font-normal text-ink-faint">
+                    {approachRoutes.length}
+                  </span>
+                </h3>
+                <p className="mb-2.5 text-xs text-ink-muted">
+                  {summitRoutes.length > 0
+                    ? "These approach the peak but stop below the summit."
+                    : "Mapped paths near the peak. None of them reach the top."}
+                </p>
+                <div className="space-y-2">
+                  {approachRoutes.map((r) => (
+                    <RouteRow
+                      key={r.id}
+                      route={r}
+                      peakSlug={peak.slug}
+                      profile={profiles.get(r.id) ?? null}
+                      difficulty={peak.difficulty}
+                      summitElevationM={peak.elevation_m}
+                      selected={r.id === activeId}
+                      onSelect={() => pickRoute(r.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Profile of whichever route is selected. */}
             <div className="mt-3">
@@ -594,7 +652,7 @@ function RouteRow({
     storedMinutes: route.est_time_min,
     difficulty,
   });
-  const km = trip.distanceKm;
+  const tripDistance = describeTripDistance(trip);
   const ascent = trip.ascentM;
   const minutes = trip.minutes;
   // The live profile, when the terrain has loaded, knows the high point
@@ -636,10 +694,9 @@ function RouteRow({
             )}
           </div>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-xs text-ink-faint">
-            <span title={trip.roundTrip ? `${formatDistance(trip.oneWayKm)} each way` : undefined}>
-              {formatDistance(km)}
-              {trip.roundTrip && " round trip"}
-            </span>
+            {/* Both distances, every time — see `describeTripDistance`. */}
+            <span>{tripDistance.primary}</span>
+            {tripDistance.secondary && <span>{tripDistance.secondary}</span>}
             {ascent ? <span>↑ {ascent.toLocaleString()} m</span> : null}
             <span>{formatEstimate(minutes)}</span>
             {profile ? <span>max {profile.maxGrade}%</span> : null}

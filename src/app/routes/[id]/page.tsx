@@ -8,10 +8,12 @@ import {
   accessInfo,
   formatDistance,
   formatDuration,
+  formatEstimate,
   type Peak,
   type PeakRoute,
 } from "@/lib/peak-types";
 import { describeSummitGap } from "@/lib/summit-gap";
+import { tripFigures } from "@/lib/trip";
 import { routeStaticMapUrl } from "@/lib/staticMap";
 import ElevationProfile from "@/components/ElevationProfile";
 import SaveToListButton from "@/components/SaveToListButton";
@@ -101,10 +103,29 @@ export default function RouteDetailPage() {
     summitElevationM: peak?.elevation_m ?? null,
   });
 
+  // The whole trip, not the one-way line the geometry stores — the stored
+  // columns describe the climb alone. See `tripFigures`.
+  const trip = tripFigures({
+    routeType: route.route_type,
+    distanceKm: route.distance_km,
+    ascentM: route.ascent_m,
+    descentM: route.descent_m,
+    storedMinutes: route.est_time_min,
+    difficulty: (peak?.difficulty ?? "hike") as "hike" | "scramble" | "technical",
+  });
+
   const stats = [
-    { label: "Distance", value: formatDistance(route.distance_km) },
-    { label: "Time", value: formatDuration(route.est_time_min) },
-    { label: "Ascent", value: route.ascent_m != null ? `${route.ascent_m.toLocaleString()} m` : "—" },
+    {
+      label: trip.roundTrip ? "Round trip" : "Distance",
+      value: formatDistance(trip.distanceKm),
+    },
+    // Listed separately rather than tucked into a tooltip: the one-way
+    // figure is the climb, and it is what a turnaround time is set against.
+    ...(trip.roundTrip && trip.oneWayKm != null
+      ? [{ label: "One way", value: formatDistance(trip.oneWayKm) }]
+      : []),
+    { label: "Est. time", value: formatEstimate(trip.minutes) },
+    { label: "Ascent", value: trip.ascentM != null ? `${trip.ascentM.toLocaleString()} m` : "—" },
     { label: "Type", value: route.route_type ?? "—" },
     { label: "Difficulty", value: route.difficulty ?? "—" },
     { label: "Surface", value: route.surface ?? "—" },

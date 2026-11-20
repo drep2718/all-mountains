@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { type PeakRoute as Route, formatDuration } from "@/lib/peak-types";
+import { type PeakRoute as Route, formatEstimate } from "@/lib/peak-types";
 import { routeStaticMapUrl } from "@/lib/staticMap";
 import { describeSummitGap } from "@/lib/summit-gap";
+import { describeTripDistance, tripFigures } from "@/lib/trip";
 
 export default function RouteCard({
   route,
@@ -15,6 +16,16 @@ export default function RouteCard({
   summitElevationM?: number | null;
 }) {
   const mapUrl = routeStaticMapUrl(route, 640, 360);
+  // The whole trip. The stored distance is the one-way line.
+  const trip = tripFigures({
+    routeType: route.route_type,
+    distanceKm: route.distance_km,
+    ascentM: route.ascent_m,
+    descentM: route.descent_m,
+    storedMinutes: route.est_time_min,
+    difficulty: (route.difficulty ?? "hike") as "hike" | "scramble" | "technical",
+  });
+  const tripDistance = describeTripDistance(trip);
   const gap = describeSummitGap({
     isSummitRoute: route.is_summit_route,
     distanceToSummitM: route.distance_to_summit_m,
@@ -63,19 +74,22 @@ export default function RouteCard({
 
         {/* Stat row — AllTrails style */}
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-sm">
-          {route.distance_km != null && (
+          {trip.distanceKm != null && (
             <span className="text-ink">
-              <span className="text-ink-faint">↔</span> {route.distance_km.toFixed(1)} km
+              <span className="text-ink-faint">↔</span> {tripDistance.primary}
             </span>
           )}
-          {route.est_time_min != null && (
+          {tripDistance.secondary && (
+            <span className="text-ink-faint">{tripDistance.secondary}</span>
+          )}
+          {trip.minutes != null && (
             <span className="text-ink">
-              <span className="text-ink-faint">⏱</span> {formatDuration(route.est_time_min)}
+              <span className="text-ink-faint">⏱</span> {formatEstimate(trip.minutes)}
             </span>
           )}
-          {route.ascent_m != null && (
+          {trip.ascentM != null && (
             <span className="text-ink">
-              <span className="text-ink-faint">▲</span> {route.ascent_m.toLocaleString()} m
+              <span className="text-ink-faint">▲</span> {trip.ascentM.toLocaleString()} m
             </span>
           )}
           {route.is_summit_route ? (
