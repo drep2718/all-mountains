@@ -115,3 +115,109 @@ export async function fetchListItems(listId: number): Promise<ListItem[]> {
   if (error) throw error;
   return (data ?? []) as ListItem[];
 }
+
+// --- ordering --------------------------------------------------------------
+
+/**
+ * How a list can be ordered.
+ *
+ * "added" is the order the rows arrive in and stays the default: a list is
+ * something the person built, and reordering it by default would throw away
+ * the only arrangement they chose themselves.
+ */
+export type ListSort =
+  | "added"
+  | "highest"
+  | "lowest"
+  | "hardest"
+  | "easiest"
+  | "name";
+
+export const LIST_SORT_LABEL: Record<ListSort, string> = {
+  added: "Recently added",
+  highest: "Highest first",
+  lowest: "Lowest first",
+  hardest: "Hardest first",
+  easiest: "Easiest first",
+  name: "Name A–Z",
+};
+
+/**
+ * Grades in the order they actually get harder, which is not alphabetical —
+ * sorting the strings would give hike, scramble, technical only by luck, and
+ * any future grade would land wherever its first letter fell.
+ */
+const DIFFICULTY_RANK: Record<string, number> = {
+  hike: 1,
+  scramble: 2,
+  technical: 3,
+};
+
+/**
+ * Sort a list's rows without mutating the query cache's array.
+ *
+ * Rows whose peak failed to join, or whose peak has no grade, always sort
+ * last whichever direction is chosen. Treating a missing value as zero would
+ * put the least informative rows at the top of "Highest first", which reads
+ * as a bug in the sort rather than as missing data.
+ */
+export function sortListItems(items: ListItem[], sort: ListSort): ListItem[] {
+  if (sort === "added") return items;
+
+  const byName = (a: ListItem, b: ListItem) =>
+    (a.peak?.name ?? a.peak_slug).localeCompare(b.peak?.name ?? b.peak_slug);
+
+  /** Missing values last, regardless of direction. */
+  const nullsLast = (
+    a: number | null | undefined,
+    b: number | null | undefined,
+    cmp: (x: number, y: number) => number
+  ): number | null => {
+    const aMissing = a == null;
+    const bMissing = b == null;
+    if (aMissing && bMissing) return 0;
+    if (aMissing) return 1;
+    if (bMissing) return -1;
+    return cmp(a, b);
+  };
+
+  return [...items].sort((a, b) => {
+    switch (sort) {
+      case "highest":
+      case "lowest": {
+        const dir = sort === "highest" ? -1 : 1;
+        const r = nullsLast(
+          a.peak?.elevation_m,
+          b.peak?.elevation_m,
+          (x, y) => (x - y) * dir
+        );
+        return r !== 0 && r != null ? r : byName(a, b);
+      }
+      case "hardest":
+      case "easiest": {
+        const dir = sort === "hardest" ? -1 : 1;
+        const r = nullsLast(
+          a.peak?.difficulty ? DIFFICULTY_RANK[a.peak.difficulty] : null,
+          b.peak?.difficulty ? DIFFICULTY_RANK[b.peak.difficulty] : null,
+          (x, y) => (x - y) * dir
+        );
+        if (r !== 0 && r != null) return r;
+        // Within a grade, break the tie by height in the same direction as
+        // the grade itself. Two technical peaks under "hardest" should put
+        // the bigger one first; two walk-ups under "easiest" should put the
+        // smaller one first. Tie-breaking one way for both made "Easiest
+        // first" open on Mount Whitney, the highest peak in the list.
+        const byHeight = nullsLast(
+          a.peak?.elevation_m,
+          b.peak?.elevation_m,
+          (x, y) => (x - y) * dir
+        );
+        return byHeight !== 0 && byHeight != null ? byHeight : byName(a, b);
+      }
+      case "name":
+        return byName(a, b);
+      default:
+        return 0;
+    }
+  });
+}

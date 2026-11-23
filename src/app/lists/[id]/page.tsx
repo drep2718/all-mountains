@@ -5,8 +5,16 @@ import { createClient } from "@/lib/supabase/client";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchList, fetchListItems, removeItem } from "@/lib/lists";
+import {
+  fetchList,
+  fetchListItems,
+  removeItem,
+  sortListItems,
+  LIST_SORT_LABEL,
+  type ListSort,
+} from "@/lib/lists";
 import type { ListItem } from "@/lib/lists";
+import { useUrlState } from "@/lib/useUrlState";
 import { DIFFICULTY_HEX, DIFFICULTY_LABEL, difficultyClasses } from "@/lib/peak-types";
 
 export default function ListDetailPage() {
@@ -21,6 +29,11 @@ export default function ListDetailPage() {
     const { data: { subscription } } = db.auth.onAuthStateChange((_event, session) => setUserId(session?.user.id ?? null));
     return () => subscription.unsubscribe();
   }, []);
+
+  // In the URL like the other browse pages, so a sorted list survives the
+  // back button and can be sent to someone in the order you meant.
+  const { state, set } = useUrlState({ sort: "added" });
+  const sort = state.sort as ListSort;
 
   const list = useQuery({ queryKey: ["list", listId], queryFn: () => fetchList(listId), enabled: validId });
   const items = useQuery({ queryKey: ["list-items", listId], queryFn: () => fetchListItems(listId), enabled: !!list.data });
@@ -37,7 +50,9 @@ export default function ListDetailPage() {
   if (list.isLoading) return <div className="p-8 text-sm text-ink-faint">Loading…</div>;
   if (!list.data) return <div className="p-8 text-sm text-ink-muted">List not found.</div>;
 
-  const rows = items.data ?? [];
+  // Sorted for display only — the stored order is left untouched, so
+  // switching back to "Recently added" restores exactly what was built.
+  const rows = sortListItems(items.data ?? [], sort);
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -48,10 +63,31 @@ export default function ListDetailPage() {
         ← All lists
       </button>
 
-      <h1 className="font-display text-3xl font-bold text-ink">{list.data.name}</h1>
-      <p className="mb-6 mt-1 text-sm text-ink-muted">
-        {rows.length} item{rows.length === 1 ? "" : "s"}
-      </p>
+      <h1 className="font-display text-3xl font-bold tracking-tight text-ink">{list.data.name}</h1>
+
+      <div className="mb-6 mt-1 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-ink-muted">
+          {rows.length} item{rows.length === 1 ? "" : "s"}
+        </p>
+
+        {/* Hidden below two items: there is nothing to reorder. */}
+        {rows.length > 1 && (
+          <label className="flex items-center gap-2 text-sm text-ink-muted">
+            <span className="sr-only">Sort list</span>
+            <select
+              value={sort}
+              onChange={(e) => set({ sort: e.target.value })}
+              className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-ink outline-none transition-colors hover:border-border-bright focus:border-pine-500"
+            >
+              {(Object.keys(LIST_SORT_LABEL) as ListSort[]).map((key) => (
+                <option key={key} value={key}>
+                  {LIST_SORT_LABEL[key]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
 
       {remove.error && <p role="alert" className="mb-4 text-sm text-diff-extreme">Couldn’t remove this mountain. Try again.</p>}
       {items.error ? (
