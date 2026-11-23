@@ -42,22 +42,39 @@ export interface TripFigures {
  * *and* its stored geometry covers only one of them.
  *
  * The second half matters. A loop already returns to its start, and some
- * mapped lines genuinely descend again — a profile with real descent has
- * both legs in it already, and doubling those would invent a trip nobody
- * makes. Treating a measured descent of roughly nothing as the signal is
- * what distinguishes the two, with a tolerance for DEM noise rather than
- * an exact zero.
+ * mapped lines genuinely undulate — a profile with real climb in both
+ * directions has both legs in it already, and doubling that would invent
+ * a trip nobody makes.
+ *
+ * The test is on the *smaller* of the two, not on descent alone, because
+ * an OSM way's direction is arbitrary. Mount Washington's Nelson Crag
+ * Trail is stored running down from the summit: ascent 11 m, descent
+ * 1,114 m. Checking descent said "not one-way" and the 11 m was published
+ * as the mountain's elevation gain. Checking the smaller of the two sees
+ * a monotonic line whichever way round it was drawn.
  */
-const DESCENT_NOISE_M = 30;
+const UNDULATION_NOISE_M = 30;
 
 export function isOneWayGeometry(
   routeType: string | null | undefined,
+  ascentM: number | null | undefined,
   descentM: number | null | undefined
 ): boolean {
   if (routeType !== "Out & Back") return false;
-  if (descentM == null) return true; // unmeasured: assume the usual case
-  return descentM <= DESCENT_NOISE_M;
+  if (descentM == null || ascentM == null) return true; // unmeasured: the usual case
+  return Math.min(ascentM, descentM) <= UNDULATION_NOISE_M;
 }
+
+/**
+ * The height gained walking a one-way line in the uphill direction.
+ *
+ * You walk a summit route toward the summit, whichever end the surveyor
+ * happened to start drawing from, so the climb is the larger of the two
+ * figures. For a line that genuinely undulates this is not used — see
+ * `isOneWayGeometry`.
+ */
+const uphillClimb = (ascentM: number, descentM: number | null): number =>
+  Math.max(ascentM, descentM ?? 0);
 
 export function tripFigures(args: {
   routeType: string | null | undefined;
@@ -75,7 +92,7 @@ export function tripFigures(args: {
   const ascentM = profile?.ascentM ?? args.ascentM ?? null;
   const descentM = profile?.descentM ?? args.descentM ?? null;
 
-  const roundTrip = isOneWayGeometry(routeType, descentM);
+  const roundTrip = isOneWayGeometry(routeType, ascentM, descentM);
 
   if (oneWayKm == null || ascentM == null) {
     return {
@@ -97,11 +114,13 @@ export function tripFigures(args: {
     };
   }
 
-  // Both legs: twice the ground, climbed once and descended once.
+  // Both legs: twice the ground, climbed once and descended once — in the
+  // uphill direction, which may be the reverse of how the line is stored.
+  const climb = uphillClimb(ascentM, descentM);
   return {
     distanceKm: oneWayKm * 2,
-    ascentM,
-    minutes: estimateMinutes(oneWayKm * 2, ascentM, ascentM, difficulty),
+    ascentM: climb,
+    minutes: estimateMinutes(oneWayKm * 2, climb, climb, difficulty),
     roundTrip: true,
     oneWayKm,
   };

@@ -37,15 +37,37 @@ describe("tripFigures", () => {
     expect(t.distanceKm).toBeCloseTo(4.7, 5);
   });
 
-  it("treats a few metres of DEM noise as no descent", () => {
-    expect(isOneWayGeometry("Out & Back", 12)).toBe(true);
-    expect(isOneWayGeometry("Out & Back", 0)).toBe(true);
-    expect(isOneWayGeometry("Out & Back", 400)).toBe(false);
-    expect(isOneWayGeometry("Loop", 0)).toBe(false);
+  it("treats a few metres of DEM noise as a monotonic line", () => {
+    expect(isOneWayGeometry("Out & Back", 900, 12)).toBe(true);
+    expect(isOneWayGeometry("Out & Back", 900, 0)).toBe(true);
+    expect(isOneWayGeometry("Out & Back", 900, 400)).toBe(false);
+    expect(isOneWayGeometry("Loop", 900, 0)).toBe(false);
   });
 
-  it("assumes the usual case when descent was never measured", () => {
-    expect(isOneWayGeometry("Out & Back", null)).toBe(true);
+  it("does not care which end of the line the surveyor started from", () => {
+    // Mount Washington's Nelson Crag Trail is stored running *down* from
+    // the summit. Testing descent alone called this undulating and
+    // published its 11 m of stored ascent as the mountain's climb.
+    expect(isOneWayGeometry("Out & Back", 11, 1114)).toBe(true);
+    const t = tripFigures({
+      routeType: "Out & Back",
+      distanceKm: 4.8,
+      ascentM: 11,
+      descentM: 1114,
+      storedMinutes: null,
+      difficulty: "hike",
+    });
+    expect(t.roundTrip).toBe(true);
+    expect(t.ascentM).toBe(1114);
+    // 9.6 km and 1,114 m of climb: Naismith gives 189 min once Langmuir
+    // credits the gentle descent. Optimistic for Nelson Crag, which is
+    // why the UI shows a range — but it is the climb, not the 11 m the
+    // stored direction implied.
+    expect(t.minutes!).toBeGreaterThan(180);
+  });
+
+  it("assumes the usual case when nothing was measured", () => {
+    expect(isOneWayGeometry("Out & Back", null, null)).toBe(true);
   });
 
   it("prefers the live profile over the stored columns", () => {

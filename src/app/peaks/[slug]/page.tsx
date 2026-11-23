@@ -29,6 +29,7 @@ import { assessHazards, type RouteProfile } from "@/lib/terrain";
 import PeakWeather from "@/components/PeakWeather";
 import DownloadPeakButton from "@/components/DownloadPeakButton";
 import LogSummitPanel from "@/components/LogSummitPanel";
+import SaveToListButton from "@/components/SaveToListButton";
 import Reviews from "@/components/Reviews";
 
 // Mapbox GL touches `window` at import time.
@@ -239,7 +240,21 @@ export default function PeakPage() {
    * the reader expects the climb, is worse than no number: the coverage
    * notice below already says plainly that nothing mapped reaches the top.
    */
-  const headlineRoute = summitRoutes[0] ?? null;
+  // Of the routes that reach the top, the one that climbs the most is the
+  // one that climbs the mountain. Taking the first instead gave Mount
+  // Washington the Nelson Crag Trail's stored 11 m of ascent — first in
+  // the table, and digitised downhill from the summit — in place of the
+  // ~1,100 m its trails actually gain.
+  //
+  // Not memoised: this sits below the component's early returns, so a
+  // hook here breaks the rules of hooks, and sorting a handful of routes
+  // costs nothing.
+  const headlineRoute =
+    [...summitRoutes].sort(
+      (a, b) =>
+        Math.max(b.ascent_m ?? 0, b.descent_m ?? 0) -
+        Math.max(a.ascent_m ?? 0, a.descent_m ?? 0)
+    )[0] ?? null;
   const headline = headlineRoute
     ? tripFigures({
         routeType: headlineRoute.route_type,
@@ -378,6 +393,21 @@ export default function PeakPage() {
               <Stat value={formatEstimate(headline.minutes)} label="Est. time" />
             </>
           )}
+        </div>
+
+        {/*
+          Saving a peak to a list was only reachable from a route page, via
+          a button that saves the route's *parent peak* — so the one screen
+          actually about the peak had no way to save it, and a peak with no
+          mapped routes could not be saved at all. It belongs here, beside
+          the name, which is where AllTrails puts Save too.
+        */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {/* Width-capped here rather than in the component: the route
+              page stacks it full-width in a sidebar, where that is right. */}
+          <div className="w-full max-w-[13rem]">
+            <SaveToListButton peakSlug={peak.slug} />
+          </div>
         </div>
       </div>
 

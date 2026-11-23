@@ -85,8 +85,8 @@ export default function Navbar() {
       )}
 
       {/* Desktop top nav */}
-      <nav className="fixed top-0 left-0 right-0 z-50 hidden border-b border-slate-800 bg-slate-950/80 backdrop-blur-xl md:block">
-        <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 lg:gap-4">
+      <nav className="fixed top-0 left-0 right-0 z-50 hidden border-b border-border/70 bg-surface/85 backdrop-blur-xl md:block">
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-5 lg:gap-4">
           <Link href="/" className="flex shrink-0 items-center gap-2">
             <span className="text-2xl">⛰</span>
             <span className="hidden font-display text-lg font-bold tracking-tight text-ink lg:inline">
@@ -106,10 +106,10 @@ export default function Navbar() {
                   key={href}
                   href={href}
                   title={label}
-                  className={`flex items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium transition-colors xl:px-2.5 ${
+                  className={`flex items-center gap-1.5 rounded-full px-2.5 py-2 text-sm font-medium transition-colors xl:px-3 ${
                     active
-                      ? "bg-alpine-500/10 text-alpine-600"
-                      : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                      ? "bg-pine-500/12 text-pine-700"
+                      : "text-ink-muted hover:bg-surface-2 hover:text-ink"
                   }`}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
@@ -129,10 +129,10 @@ export default function Navbar() {
                 onClick={() => setMenuOpen((o) => !o)}
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
-                className={`flex items-center gap-1 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-1 rounded-full px-3 py-2 text-sm font-medium transition-colors ${
                   secondaryItems.some((i) => pathname.startsWith(i.href))
-                    ? "bg-alpine-500/10 text-alpine-600"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                    ? "bg-pine-500/12 text-pine-700"
+                    : "text-ink-muted hover:bg-surface-2 hover:text-ink"
                 }`}
               >
                 <span>More</span>
@@ -142,7 +142,7 @@ export default function Navbar() {
               {menuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-xl border border-slate-800 bg-slate-950/95 py-1 shadow-xl shadow-black/40 backdrop-blur-xl"
+                  className="absolute right-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-2xl border border-border bg-surface py-1.5 shadow-xl shadow-black/10 ring-1 ring-black/5"
                 >
                   {secondaryItems.map(({ href, label, icon: Icon }) => (
                     <Link
@@ -153,10 +153,10 @@ export default function Navbar() {
                       // the menu must not be left hanging open over the page
                       // it just navigated to.
                       onClick={() => setMenuOpen(false)}
-                      className={`flex items-center gap-2.5 px-3 py-2 text-sm font-medium transition-colors ${
+                      className={`flex items-center gap-2.5 px-3.5 py-2.5 text-sm font-medium transition-colors ${
                         pathname.startsWith(href)
-                          ? "bg-alpine-500/10 text-alpine-600"
-                          : "text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+                          ? "bg-pine-500/12 text-pine-700"
+                          : "text-ink-muted hover:bg-surface-2 hover:text-ink"
                       }`}
                     >
                       <Icon className="h-4 w-4 shrink-0" />
@@ -170,14 +170,14 @@ export default function Navbar() {
             {user ? (
               <button
                 onClick={handleSignOut}
-                className="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+                className="whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
               >
                 Sign Out
               </button>
             ) : (
               <Link
                 href="/login"
-                className="whitespace-nowrap rounded-lg bg-alpine-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-alpine-500"
+                className="whitespace-nowrap rounded-full bg-pine-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-pine-600"
               >
                 Sign In
               </Link>
