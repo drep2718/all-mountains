@@ -1,11 +1,11 @@
 import Link from "next/link";
 import {
   CATEGORY_LABEL,
-  DIFFICULTY_DOT,
-  DIFFICULTY_LABEL,
   type Peak,
 } from "@/lib/peak-types";
 import { commonsWidth } from "@/lib/commons";
+import { seasonalGrade } from "@/lib/season";
+import SeasonBadge from "@/components/SeasonBadge";
 
 /** Falls back to a satellite view so every card shows a mountain. */
 function cardImage(peak: Peak): string | null {
@@ -39,12 +39,22 @@ export default function PeakCard({
   peak,
   distance,
   summited,
+  month,
 }: {
   peak: Peak;
   distance?: number;
   summited?: boolean;
+  /** The month window being planned for. Defaults to now. */
+  month?: { from: number; to: number };
 }) {
   const imageUrl = cardImage(peak);
+  const grade = seasonalGrade({
+    difficulty: peak.difficulty,
+    latitude: peak.latitude,
+    elevationM: peak.elevation_m,
+    from: month?.from,
+    to: month?.to,
+  });
   const place = [peak.range_name, peak.region ?? peak.country].filter(Boolean).join(" · ");
 
   return (
@@ -80,10 +90,7 @@ export default function PeakCard({
       <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-sm text-ink-muted">
         <span className="font-medium text-ink">{peak.elevation_m.toLocaleString()} m</span>
         <span aria-hidden>·</span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className={`h-2 w-2 shrink-0 rounded-full ${DIFFICULTY_DOT[peak.difficulty]}`} />
-          {DIFFICULTY_LABEL[peak.difficulty]}
-        </span>
+        <SeasonBadge grade={grade} />
         {peak.prominence_m ? (
           <>
             <span aria-hidden>·</span>

@@ -15,7 +15,10 @@ import {
 } from "@/lib/lists";
 import type { ListItem } from "@/lib/lists";
 import { useUrlState } from "@/lib/useUrlState";
-import { DIFFICULTY_HEX, DIFFICULTY_LABEL, difficultyClasses } from "@/lib/peak-types";
+import MonthPicker from "@/components/MonthPicker";
+import SeasonBadge from "@/components/SeasonBadge";
+import { seasonalGrade } from "@/lib/season";
+import { DIFFICULTY_HEX } from "@/lib/peak-types";
 
 export default function ListDetailPage() {
   const { id } = useParams();
@@ -32,8 +35,10 @@ export default function ListDetailPage() {
 
   // In the URL like the other browse pages, so a sorted list survives the
   // back button and can be sent to someone in the order you meant.
-  const { state, set } = useUrlState({ sort: "added" });
+  const NOW = new Date().getMonth();
+  const { state, set } = useUrlState({ sort: "added", m: NOW, mt: NOW });
   const sort = state.sort as ListSort;
+  const month = { from: state.m, to: state.mt };
 
   const list = useQuery({ queryKey: ["list", listId], queryFn: () => fetchList(listId), enabled: validId });
   const items = useQuery({ queryKey: ["list-items", listId], queryFn: () => fetchListItems(listId), enabled: !!list.data });
@@ -52,7 +57,7 @@ export default function ListDetailPage() {
 
   // Sorted for display only — the stored order is left untouched, so
   // switching back to "Recently added" restores exactly what was built.
-  const rows = sortListItems(items.data ?? [], sort);
+  const rows = sortListItems(items.data ?? [], sort, month);
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -69,6 +74,14 @@ export default function ListDetailPage() {
         <p className="text-sm text-ink-muted">
           {rows.length} item{rows.length === 1 ? "" : "s"}
         </p>
+
+        <div className="flex flex-wrap items-center gap-3">
+        <MonthPicker
+          from={state.m}
+          to={state.mt}
+          compact
+          onChange={({ from, to }) => set({ m: from, mt: to })}
+        />
 
         {/* Hidden below two items: there is nothing to reorder. */}
         {rows.length > 1 && (
@@ -87,6 +100,7 @@ export default function ListDetailPage() {
             </select>
           </label>
         )}
+        </div>
       </div>
 
       {remove.error && <p role="alert" className="mb-4 text-sm text-diff-extreme">Couldn’t remove this mountain. Try again.</p>}
@@ -124,12 +138,17 @@ export default function ListDetailPage() {
                       : "—"}
                   </div>
                 </Link>
-                {diff && (
-                  <span
-                    className={`flex-none rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${difficultyClasses(diff)}`}
-                  >
-                    {DIFFICULTY_LABEL[diff]}
-                  </span>
+                {diff && p && (
+                  <SeasonBadge
+                    className="flex-none text-xs"
+                    grade={seasonalGrade({
+                      difficulty: diff,
+                      latitude: p.latitude,
+                      elevationM: p.elevation_m,
+                      from: month.from,
+                      to: month.to,
+                    })}
+                  />
                 )}
                 {list.data?.user_id === userId && <button
                   onClick={() => remove.mutate(it)}

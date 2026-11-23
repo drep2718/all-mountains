@@ -10,6 +10,7 @@
 
 import type mapboxgl from "mapbox-gl";
 import type { LngLat } from "@/lib/polyline";
+import { seasonalGrade } from "@/lib/season";
 
 export interface ElevationSample {
   /** Cumulative distance from the start, km. */
@@ -265,6 +266,8 @@ export interface HazardInput {
   latitude: number;
   /** Current month, 0-11. Defaults to now. */
   month?: number;
+  /** End of an inclusive month range, 0-11. Omit for a single month. */
+  monthTo?: number;
   /** From the live forecast, when it is available. */
   weather?: { tempC: number; windKph: number; code: number } | null;
 }
@@ -343,24 +346,25 @@ export function assessHazards(input: HazardInput): Hazard[] {
   }
 
   // --- season ---
-  // Northern winter runs Nov–Apr, southern May–Oct.
-  const northern = latitude >= 0;
-  const winter = northern ? month >= 10 || month <= 3 : month >= 4 && month <= 9;
-  const shoulder = northern ? month === 4 || month === 9 : month === 10 || month === 3;
-  const snowLine = Math.abs(latitude) > 60 ? 600 : Math.abs(latitude) > 45 ? 1500 : 2500;
+  // Delegated to `seasonalGrade` so this panel and the difficulty badge
+  // cannot disagree about the same month. The model that used to live
+  // here bucketed the snow line at 45°, which put Mount Washington's
+  // 1,917 m summit below a 2,500 m line and produced no winter warning at
+  // all for the mountain people cite as the example.
+  const seasonal = seasonalGrade({
+    difficulty,
+    latitude,
+    elevationM: ele,
+    from: month,
+    to: input.monthTo,
+  });
 
-  if (winter && ele >= snowLine) {
-    out.push({
-      level: "serious",
-      title: "Winter conditions likely",
-      detail: `At ${ele.toLocaleString()} m and this latitude the route is probably under snow and ice right now. Axe, crampons and avalanche awareness.`,
-    });
-  } else if (shoulder && ele >= snowLine) {
-    out.push({
-      level: "caution",
-      title: "Snow may linger",
-      detail: `Shoulder season. Old snow often holds in gullies and on north-facing ground above about ${snowLine.toLocaleString()} m.`,
-    });
+  if (seasonal.steps >= 2) {
+    out.push({ level: "serious", title: seasonal.label, detail: seasonal.detail });
+  } else if (seasonal.steps === 1) {
+    out.push({ level: "caution", title: seasonal.label, detail: seasonal.detail });
+  } else if (seasonal.snowLikely) {
+    out.push({ level: "caution", title: seasonal.label, detail: seasonal.detail });
   }
 
   // --- live weather ---

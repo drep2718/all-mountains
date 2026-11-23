@@ -6,8 +6,6 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   CATEGORY_LABEL,
-  DIFFICULTY_DOT,
-  DIFFICULTY_LABEL,
   accessInfo,
   formatDistance,
   formatEstimate,
@@ -30,6 +28,10 @@ import PeakWeather from "@/components/PeakWeather";
 import DownloadPeakButton from "@/components/DownloadPeakButton";
 import LogSummitPanel from "@/components/LogSummitPanel";
 import SaveToListButton from "@/components/SaveToListButton";
+import MonthPicker from "@/components/MonthPicker";
+import SeasonBadge from "@/components/SeasonBadge";
+import { seasonalGrade } from "@/lib/season";
+import { useUrlState } from "@/lib/useUrlState";
 import Reviews from "@/components/Reviews";
 
 // Mapbox GL touches `window` at import time.
@@ -64,6 +66,12 @@ export default function PeakPage() {
     null
   );
   const [fromCache, setFromCache] = useState(false);
+  // The month window drives the grade, the hazards and the badge. In the
+  // URL so a plan for February can be sent to the person you are going with.
+  const { state: monthState, set: setMonth } = useUrlState({
+    m: new Date().getMonth(),
+    mt: new Date().getMonth(),
+  });
 
   // Offline bundle first, network second. If this inverts, the one screen that
   // has to work on a mountain stops working on a mountain.
@@ -283,7 +291,17 @@ export default function PeakPage() {
     profile: activeProfile,
     distanceKm: activeRoute?.distance_km ?? null,
     latitude: peak.latitude,
+    month: monthState.m,
+    monthTo: monthState.mt,
     weather,
+  });
+
+  const grade = seasonalGrade({
+    difficulty: peak.difficulty,
+    latitude: peak.latitude,
+    elevationM: peak.elevation_m,
+    from: monthState.m,
+    to: monthState.mt,
   });
 
   return (
@@ -330,10 +348,7 @@ export default function PeakPage() {
         </h1>
 
         <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-muted">
-          <span className="inline-flex items-center gap-1.5 font-medium text-ink">
-            <span className={`h-2 w-2 shrink-0 rounded-full ${DIFFICULTY_DOT[peak.difficulty]}`} />
-            {DIFFICULTY_LABEL[peak.difficulty]}
-          </span>
+          <SeasonBadge grade={grade} />
           {peak.category === "highpoint" && (
             <>
               <span aria-hidden>·</span>
@@ -408,7 +423,20 @@ export default function PeakPage() {
           <div className="w-full max-w-[13rem]">
             <SaveToListButton peakSlug={peak.slug} />
           </div>
+          <MonthPicker
+            from={monthState.m}
+            to={monthState.mt}
+            onChange={({ from, to }) => setMonth({ m: from, mt: to })}
+          />
         </div>
+
+        {/* Spelled out when the month actually changes the grade — the
+            badge alone cannot carry why a walk-up became a climb. */}
+        {grade.steps > 0 && (
+          <p className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs leading-relaxed text-ink-muted">
+            <span className="font-semibold text-ink">{grade.label}.</span> {grade.detail}
+          </p>
+        )}
       </div>
 
       {/* The mountain itself */}

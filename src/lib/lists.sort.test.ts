@@ -105,3 +105,31 @@ describe("sortListItems", () => {
     }
   });
 });
+
+describe("sortListItems with a month", () => {
+  // Mount Washington is a walk-up in July and a winter climb in February;
+  // the order of a list has to follow the badge on its rows.
+  const washington = {
+    id: 1, list_id: 1, peak_slug: "washington", created_at: "2026-01-01",
+    peak: { name: "Washington", elevation_m: 1917, latitude: 44.27, difficulty: "hike" } as never,
+  };
+  const lowScramble = {
+    id: 2, list_id: 1, peak_slug: "low-scramble", created_at: "2026-01-01",
+    peak: { name: "Low Scramble", elevation_m: 400, latitude: 34, difficulty: "scramble" } as never,
+  };
+  const pair = [washington, lowScramble];
+
+  it("ranks by the catalogue grade in summer", () => {
+    const out = sortListItems(pair, "hardest", { from: 6, to: 6 });
+    expect(out[0].peak_slug).toBe("low-scramble");
+  });
+
+  it("ranks Washington hardest in February", () => {
+    const out = sortListItems(pair, "hardest", { from: 1, to: 1 });
+    expect(out[0].peak_slug).toBe("washington");
+  });
+
+  it("falls back to the catalogue grade when no month is given", () => {
+    expect(sortListItems(pair, "hardest")[0].peak_slug).toBe("low-scramble");
+  });
+});

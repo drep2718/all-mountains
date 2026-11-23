@@ -116,25 +116,39 @@ describe("terrain hazard boundaries", () => {
     expect(altitude.map((h) => h.title)).toEqual(title ? [title] : []);
   });
 
-  it.each([0, 1, 2, 3, 10, 11])("recognises northern winter in month %i", (month) => {
-    expect(hazards({ summitElevationM: 3000, month }).some((h) => h.title === "Winter conditions likely")).toBe(true);
+  /**
+   * The season half of this panel now comes from `seasonalGrade`, so that
+   * it and the difficulty badge cannot describe the same month
+   * differently. These expectations changed with it, deliberately:
+   * April and October are shoulder months rather than winter, and the
+   * snow line is a continuous function of latitude instead of three
+   * buckets. See src/lib/season.test.ts for the model's own tests.
+   */
+  it.each([0, 1, 2, 10, 11])("recognises northern winter in month %i", (month) => {
+    expect(hazards({ summitElevationM: 3000, month }).some((h) => /Winter conditions/.test(h.title))).toBe(true);
   });
 
-  it.each([4, 5, 6, 7, 8, 9])("recognises southern winter in month %i", (month) => {
-    expect(hazards({ summitElevationM: 3000, latitude: -40, month }).some((h) => h.title === "Winter conditions likely")).toBe(true);
+  it.each([4, 5, 6, 7, 8])("recognises southern winter in month %i", (month) => {
+    expect(hazards({ summitElevationM: 3000, latitude: -40, month }).some((h) => /Winter conditions/.test(h.title))).toBe(true);
   });
 
   it("switches seasons between hemispheres and handles shoulder months", () => {
-    expect(hazards({ summitElevationM: 3000, month: 6 }).some((h) => /Winter|linger/.test(h.title))).toBe(false);
-    expect(hazards({ summitElevationM: 3000, latitude: -40, month: 0 }).some((h) => /Winter|linger/.test(h.title))).toBe(false);
-    expect(hazards({ summitElevationM: 3000, month: 4 }).some((h) => h.title === "Snow may linger")).toBe(true);
-    expect(hazards({ summitElevationM: 3000, latitude: -40, month: 10 }).some((h) => h.title === "Snow may linger")).toBe(true);
+    expect(hazards({ summitElevationM: 3000, month: 6 }).some((h) => /Winter|snow/i.test(h.title))).toBe(false);
+    expect(hazards({ summitElevationM: 3000, latitude: -40, month: 0 }).some((h) => /Winter|snow/i.test(h.title))).toBe(false);
+    // April north, October south: autumn/spring on either side.
+    expect(hazards({ summitElevationM: 3000, month: 3 }).some((h) => /Snow/i.test(h.title))).toBe(true);
+    expect(hazards({ summitElevationM: 3000, latitude: -40, month: 9 }).some((h) => /Snow/i.test(h.title))).toBe(true);
   });
 
   it("lowers the seasonal snowline at high latitudes", () => {
-    expect(hazards({ latitude: 65, summitElevationM: 600, month: 0 }).some((h) => /Winter/.test(h.title))).toBe(true);
-    expect(hazards({ latitude: 65, summitElevationM: 599, month: 0 }).some((h) => /Winter/.test(h.title))).toBe(false);
-    expect(hazards({ latitude: 50, summitElevationM: 1500, month: 0 }).some((h) => /Winter/.test(h.title))).toBe(true);
+    // At 65° the line is about 250 m, so a 300 m hill is above it in
+    // January and a 200 m one is not. The old bucketed model put the line
+    // at a flat 600 m here and at 2,500 m for everything below 45°, which
+    // is what hid Mount Washington's winter entirely.
+    expect(hazards({ latitude: 65, summitElevationM: 300, month: 0 }).some((h) => /Winter conditions/.test(h.title))).toBe(true);
+    expect(hazards({ latitude: 65, summitElevationM: 200, month: 0 }).some((h) => /Winter conditions/.test(h.title))).toBe(false);
+    expect(hazards({ latitude: 50, summitElevationM: 1500, month: 0 }).some((h) => /Winter conditions/.test(h.title))).toBe(true);
+    expect(hazards({ latitude: 44.27, summitElevationM: 1917, month: 1 }).some((h) => /Winter conditions/.test(h.title))).toBe(true);
   });
 
   it("uses measured grade/ascent and puts serious hazards first", () => {

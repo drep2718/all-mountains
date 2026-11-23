@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Peak } from "@/lib/peak-types";
+import { seasonalGrade } from "@/lib/season";
 
 /**
  * Saved lists of mountains.
@@ -161,8 +162,32 @@ const DIFFICULTY_RANK: Record<string, number> = {
  * put the least informative rows at the top of "Highest first", which reads
  * as a bug in the sort rather than as missing data.
  */
-export function sortListItems(items: ListItem[], sort: ListSort): ListItem[] {
+export function sortListItems(
+  items: ListItem[],
+  sort: ListSort,
+  /**
+   * The month window being planned for. When given, the grade sorts use
+   * the seasonal grade rather than the catalogue's — otherwise the badge
+   * on a row and the order of the rows would disagree about the same
+   * month, which is the sort of quiet contradiction nobody reports and
+   * everybody mistrusts.
+   */
+  month?: { from: number; to: number }
+): ListItem[] {
   if (sort === "added") return items;
+
+  const gradeOf = (it: ListItem): string | null | undefined => {
+    const p = it.peak;
+    if (!p?.difficulty) return p?.difficulty;
+    if (!month) return p.difficulty;
+    return seasonalGrade({
+      difficulty: p.difficulty,
+      latitude: p.latitude,
+      elevationM: p.elevation_m,
+      from: month.from,
+      to: month.to,
+    }).effective;
+  };
 
   const byName = (a: ListItem, b: ListItem) =>
     (a.peak?.name ?? a.peak_slug).localeCompare(b.peak?.name ?? b.peak_slug);
@@ -197,8 +222,8 @@ export function sortListItems(items: ListItem[], sort: ListSort): ListItem[] {
       case "easiest": {
         const dir = sort === "hardest" ? -1 : 1;
         const r = nullsLast(
-          a.peak?.difficulty ? DIFFICULTY_RANK[a.peak.difficulty] : null,
-          b.peak?.difficulty ? DIFFICULTY_RANK[b.peak.difficulty] : null,
+          gradeOf(a) ? DIFFICULTY_RANK[gradeOf(a)!] : null,
+          gradeOf(b) ? DIFFICULTY_RANK[gradeOf(b)!] : null,
           (x, y) => (x - y) * dir
         );
         if (r !== 0 && r != null) return r;

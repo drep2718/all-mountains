@@ -6,6 +6,7 @@ import PeakCard from "@/components/PeakCard";
 import LocationSearch from "@/components/LocationSearch";
 import { decodePlace, encodePlace, type GeocodeResult } from "@/lib/geocode";
 import { useUrlState } from "@/lib/useUrlState";
+import MonthPicker from "@/components/MonthPicker";
 import type { Peak, PeakDifficulty, PeakCategory } from "@/lib/peak-types";
 import { DIFFICULTY_LABEL } from "@/lib/peak-types";
 
@@ -21,7 +22,14 @@ const difficulties: PeakDifficulty[] = ["hike", "scramble", "technical"];
  * `radius` is inverted (`noRadius`) for that reason: the filter is on by
  * default, and encoding the common case would put `radius=1` in every URL.
  */
+const NOW = new Date().getMonth();
+
 const FILTER_DEFAULTS = {
+  // Defaults to the current month, so the grades on screen describe going
+  // now. Equal-to-default values stay out of the URL, so a plain browse
+  // is still /peaks.
+  m: NOW,
+  mt: NOW,
   q: "",
   difficulty: "All",
   iconic: false,
@@ -42,6 +50,7 @@ export default function PeaksPage() {
   const sortBy = state.sort as "popular" | "elevation" | "name";
   const radiusOn = !state.noRadius;
   const page = state.page;
+  const month = { from: state.m, to: state.mt };
   const place = useMemo<GeocodeResult | null>(
     () => (state.place ? decodePlace(state.place) : null),
     [state.place]
@@ -186,6 +195,13 @@ export default function PeaksPage() {
           <option value="elevation">Highest First</option>
           <option value="name">A → Z</option>
         </select>
+
+        {/* Grades on the cards below are for this window. */}
+        <MonthPicker
+          from={state.m}
+          to={state.mt}
+          onChange={({ from, to }) => set({ m: from, mt: to })}
+        />
       </div>
 
       {/* Active area chip + radius toggle */}
@@ -232,7 +248,7 @@ export default function PeaksPage() {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {peaks.map((peak) => (
-              <PeakCard key={peak.slug} peak={peak} />
+              <PeakCard key={peak.slug} peak={peak} month={month} />
             ))}
           </div>
 
